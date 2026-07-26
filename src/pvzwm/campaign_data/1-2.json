@@ -1,0 +1,45 @@
+{
+  "stage_id": "1-2",
+  "fidelity": "partial",
+  "source_urls": [
+    "https://plantsvszombies.wiki.gg/wiki/Level_1-2",
+    "https://plantsvszombies.wiki.gg/wiki/Adventure_Mode"
+  ],
+  "wiki_revision_id": 2518395,
+  "known_constraints": {
+    "active_rows": [1, 2, 3],
+    "available_plants": ["Peashooter", "Sunflower"],
+    "starting_sun": 50,
+    "adventure1_wave_count": 6,
+    "reward_unlock": "Cherry Bomb"
+  },
+  "provenance": {
+    "sourced": [
+      "active_rows",
+      "available_plants",
+      "starting_sun",
+      "adventure1_wave_count",
+      "wave_zombie_composition",
+      "reward_unlock"
+    ],
+    "inferred": ["spawn_times", "spawn_rows"]
+  },
+  "engine": {
+    "background_type": 0,
+    "init_sun_value": 50,
+    "zombie_list": [
+      {"time": 20000, "map_y": 2, "name": "Zombie", "wave": 1},
+      {"time": 35000, "map_y": 1, "name": "Zombie", "wave": 2},
+      {"time": 50000, "map_y": 3, "name": "Zombie", "wave": 3},
+      {"time": 65000, "map_y": 1, "name": "Zombie", "wave": 4},
+      {"time": 66000, "map_y": 3, "name": "Zombie", "wave": 4},
+      {"time": 80000, "map_y": 1, "name": "Zombie", "wave": 5},
+      {"time": 81000, "map_y": 2, "name": "Zombie", "wave": 5},
+      {"time": 100000, "map_y": 1, "name": "Zombie", "wave": 6},
+      {"time": 100500, "map_y": 1, "name": "Zombie", "wave": 6},
+      {"time": 101000, "map_y": 2, "name": "Zombie", "wave": 6},
+      {"time": 101500, "map_y": 3, "name": "Zombie", "wave": 6},
+      {"time": 102000, "map_y": 3, "name": "FlagZombie", "wave": 6}
+    ]
+  }
+}

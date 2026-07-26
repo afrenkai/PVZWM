@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-14",
+  "environment": "wszqkzqk/PvZ-Portable with PVZWM protocol v3",
+  "level": "1-4",
+  "source": "pvz_portable_vector",
+  "vector_version": 2,
+  "state_dim": 585,
+  "action_dim": 650,
+  "method": "stochastic learned-policy rollout followed by return-ranked masked behavior cloning",
+  "generations": [
+    {
+      "generation": 0,
+      "producer_checkpoint": "artifacts/frontier-level4-lh-g1-l1-e01-75k.pt",
+      "producer_sha256": "02255a1cc08e22018988f45bfff392b99e18f1f8bceaa7616dc054ce0c89d352",
+      "producer_effective_config": {
+        "rollout_steps": 2048,
+        "discount": 0.99,
+        "gae_lambda": 0.95,
+        "entropy_weight": 0.01
+      },
+      "provenance_note": "The historical filename requested g1/l1, but the immutable DuckDB experiment config proves those flags were not forwarded.",
+      "seed_begin": 76000,
+      "seed_end": 76099,
+      "episodes": 100,
+      "transitions": 47156,
+      "wins": 2,
+      "win_seeds": [76089, 76097],
+      "win_returns": [108.16, 108.16],
+      "selected_child": "artifacts/frontier-level4-gen0-bc-top20-f05.pt",
+      "selected_child_sha256": "cacc02b9191f293e3faaf797dbb916e1832a642347514b150c95fcf94bb3dd94"
+    },
+    {
+      "generation": 1,
+      "producer_checkpoint": "artifacts/frontier-level4-gen0-bc-top20-f05.pt",
+      "producer_sha256": "cacc02b9191f293e3faaf797dbb916e1832a642347514b150c95fcf94bb3dd94",
+      "seed_begin": 79000,
+      "seed_end": 79099,
+      "episodes": 100,
+      "transitions": 46694,
+      "wins": 2,
+      "win_seeds": [79024, 79083],
+      "win_returns": [108.06, 107.96],
+      "selected_child": "artifacts/frontier-level4-gen1-bc-gen1-top20.pt",
+      "selected_child_sha256": "e016015093a385b3eb54ff8ddfade58b1a1291e679537835ac38dd4d66c6033f"
+    },
+    {
+      "generation": 2,
+      "producer_checkpoint": "artifacts/frontier-level4-gen1-bc-gen1-top20.pt",
+      "producer_sha256": "e016015093a385b3eb54ff8ddfade58b1a1291e679537835ac38dd4d66c6033f",
+      "seed_begin": 82000,
+      "seed_end": 82099,
+      "episodes": 100,
+      "transitions": 49213,
+      "wins": 0,
+      "replay": "data/frontier-level4-elite-gen2-100.duckdb",
+      "replay_sha256": "dbbdc40f8d67e46a9baac6b0cab08706ea236cffe50738cf7c6a7b0a2a6a31aa"
+    }
+  ],
+  "successful_generations_replay": {
+    "path": "data/frontier-level4-elite-gen0-1-200.duckdb",
+    "sha256": "5290ef883c584ecabee747d9fe87d333cb5ac935838b14086919c533da0515fa",
+    "episodes": 200,
+    "transitions": 93850,
+    "wins": 4
+  },
+  "native_visual_evaluation": {
+    "producer_checkpoint": "artifacts/frontier-level4-lh-g1-l1-e01-75k.pt",
+    "producer_effective_discount": 0.99,
+    "producer_effective_gae_lambda": 0.95,
+    "seed_begin": 85000,
+    "seed_end": 85042,
+    "episodes": 43,
+    "transitions": 18721,
+    "wins": 1,
+    "win_seed": 85042,
+    "win_return": 108.159,
+    "win_length": 1132,
+    "replay": "data/frontier-level4-video-search-85000.duckdb",
+    "replay_sha256": "0d2f91c105be15792b22721d14d9b768de51611664d94cee247ff21b54ada23a",
+    "video": "artifacts/level4-learned-win-native-800x600.mp4",
+    "video_sha256": "e868aac7c717039a2553d50ca9b2c112a87f5008576ad933445be911053dfe68",
+    "video_resolution": [800, 600],
+    "video_resolution_semantics": "fixed game canvas rendered offscreen; independent of the resizable SDL presentation",
+    "video_frames": 143,
+    "video_frame_stride": 8,
+    "video_fps": 10,
+    "capture_semantics": "zero-tick observe calls sampled the live winning episode without advancing simulation"
+  },
+  "interpretation": "Two separate learned policies each won 2/100 evaluation episodes. Generation 2 regressed to 0/100, so this is an occasional solution and a data-generation breakthrough, not monotonic policy iteration or mastery."
+}

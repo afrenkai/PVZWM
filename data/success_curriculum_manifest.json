@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-14",
+  "environment": "wszqkzqk/PvZ-Portable with PVZWM protocol v3",
+  "source": "pvz_portable_vector",
+  "vector_version": 2,
+  "state_dim": 585,
+  "action_dim": 650,
+  "success_definition": "completed episode return > 0; new recordings additionally persist terminal metadata won=true",
+  "corpora": {
+    "planner_level1": {
+      "path": "data/cem-demo-level1-8.duckdb",
+      "sha256": "3f09636a51ac44e089c18490624b262ade46482bf2ec0169c66eb5e857c065d4",
+      "episodes": 8,
+      "transitions": 1835,
+      "successful_episodes": 8,
+      "levels": {"1-1": {"episodes": 8, "successes": 8}},
+      "producer": "categorical CEM with the original rollout-h8 ensemble"
+    },
+    "success_level1_2": {
+      "path": "data/success-curriculum-level1-2.duckdb",
+      "sha256": "a0df3e41ab4657c890ccf857e985bb8c0ae3c9472f33056b206c1a589afb834e",
+      "episodes": 48,
+      "transitions": 20963,
+      "successful_episodes": 16,
+      "successful_transitions": 7022,
+      "levels": {
+        "1-1": {"successes": 8},
+        "1-2": {"successes": 8}
+      },
+      "producer": "planner level-1 demonstrations plus stochastic PPO level-2 rollouts"
+    },
+    "success_level1_3": {
+      "path": "data/success-curriculum-level1-3.duckdb",
+      "sha256": "16a63e1f518012af46a13dc431dab8541d1b549b3c3998733253ceecf1c5da3e",
+      "episodes": 128,
+      "transitions": 56647,
+      "successful_episodes": 20,
+      "successful_transitions": 10483,
+      "levels": {
+        "1-1": {"successes": 8},
+        "1-2": {"successes": 8},
+        "1-3": {"successes": 4}
+      },
+      "producer": "level-1/2 success corpus plus stochastic sequential-PPO level-3 rollouts"
+    },
+    "success_level1_4": {
+      "path": "data/success-curriculum-level1-4.duckdb",
+      "sha256": "55fb8d0f1d5b21b414d6442201be03845211c66a20b598d3f29f9fc09be8edfa",
+      "episodes": 328,
+      "transitions": 150497,
+      "successful_episodes": 24,
+      "successful_transitions": 14803,
+      "levels": {
+        "1-1": {"episodes": 8, "successes": 8},
+        "1-2": {"episodes": 40, "successes": 8},
+        "1-3": {"episodes": 80, "successes": 4},
+        "1-4": {"episodes": 200, "successes": 4}
+      },
+      "producer": "level-1/2/3 success corpus plus two stochastic learned-policy level-4 generations"
+    }
+  },
+  "policy_lineage": [
+    "rollout-h8 ensemble -> categorical CEM level-1 demonstrations",
+    "balanced masked behavior cloning -> stochastic level-2 successes",
+    "behavior-cloned PPO curriculum -> stochastic level-3 successes",
+    "successful replay -> balanced masked behavior cloning",
+    "rollout-2048 PPO -> reward-ranked behavior cloning -> stochastic level-4 successes"
+  ],
+  "limitations": [
+    "These replay corpora are selected training data, not held-out policy evaluation.",
+    "Most recorded level-2 through level-4 episodes lose; success counts are intentionally reported separately.",
+    "Coverage through level 1-4 does not establish mastery of those levels or playability of all 50 Adventure stages.",
+    "Vector-v2 is partially observed and omits projectiles, coin positions, lawn mowers, grid items, and engine RNG state."
+  ]
+}

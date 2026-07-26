@@ -151,6 +151,13 @@ activemq-data/
 .env
 .envrc
 .venv
+.DS_Store
+artifacts/
+data/*.duckdb
+data/*.duckdb.wal
+data/pvz-goty/
+data/raw/
+vendor/PvZ-Portable/
 env/
 venv/
 ENV/

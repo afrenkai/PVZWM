@@ -1,0 +1,878 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ba6f93c..5b40793 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -46,6 +46,10 @@ file(GLOB SOURCES CONFIGURE_DEPENDS
+ 	src/Lawn/System/*.cpp
+ )
+ 
++set(PVZWM_BRIDGE_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/PVZWMBridge.cpp)
++list(REMOVE_ITEM SOURCES ${PVZWM_BRIDGE_SOURCE})
++option(PVZWM_BUILD_BRIDGE "Build the process-local PvZWM RL bridge" OFF)
++
+ # these files are included and must not be built in the project
+ list(REMOVE_ITEM SOURCES
+ 	${CMAKE_CURRENT_SOURCE_DIR}/src/Sexy.TodLib/TodDrawTriangle.cpp
+@@ -255,6 +259,42 @@ else()
+ 	)
+ endif()
+ 
++if(PVZWM_BUILD_BRIDGE AND NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN AND NOT NINTENDO_SWITCH AND NOT NINTENDO_3DS)
++	set(PVZWM_BRIDGE_SOURCES ${SOURCES})
++	list(REMOVE_ITEM PVZWM_BRIDGE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
++	add_executable(pvzwm-bridge ${PVZWM_BRIDGE_SOURCES} ${PVZWM_BRIDGE_SOURCE})
++	target_include_directories(pvzwm-bridge PRIVATE
++		${PLAT_INCLUDES}
++		${PROJECT_SOURCE_DIR}/src
++		${PROJECT_SOURCE_DIR}/src/SexyAppFramework
++		${PROJECT_SOURCE_DIR}/src/SexyAppFramework/sound/SDL-Mixer-X/include
++		${SDL2_INCLUDE_DIRS}
++	)
++	target_compile_definitions(pvzwm-bridge PRIVATE
++		$<$<BOOL:${PVZ_DEBUG}>:PVZ_DEBUG>
++		$<$<BOOL:${DO_FIX_BUGS}>:DO_FIX_BUGS>
++		IMG_DOWNSCALE=${DOWNSCALE_COUNT}
++	)
++	if(LOW_MEMORY)
++		target_compile_definitions(pvzwm-bridge PRIVATE LOW_MEMORY)
++	endif()
++	target_compile_features(pvzwm-bridge PRIVATE cxx_std_20)
++	set_target_properties(pvzwm-bridge PROPERTIES CXX_EXTENSIONS OFF)
++	target_link_libraries(pvzwm-bridge PRIVATE
++		SDL2_mixer_ext_Static
++		${OPENMPT_LIB}
++		${MPG123_LIB}
++		${VORBIS_LIB}
++		${OGG_LIB}
++		PNG::PNG
++		JPEG::JPEG
++		ZLIB::ZLIB
++		SDL2::SDL2main
++		${SDL2_LINK_TARGET}
++		Threads::Threads
++	)
++endif()
++
+ if (WIN32)
+ 	if(MSVC)
+ 		target_compile_options(pvz-portable PRIVATE /utf-8)
+diff --git a/src/PVZWMBridge.cpp b/src/PVZWMBridge.cpp
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/PVZWMBridge.cpp
+@@ -0,0 +1,814 @@
++/*
++ * SPDX-License-Identifier: LGPL-3.0-or-later
++ *
++ * Process-local RL bridge for PvZWM. The protocol is newline-delimited JSON
++ * prefixed with "PVZWM "; engine log lines can therefore share stdout safely.
++ */
++
++#include "LawnApp.h"
++#include "Resources.h"
++#include "Lawn/Board.h"
++#include "Lawn/Coin.h"
++#include "Lawn/Challenge.h"
++#include "Lawn/Cutscene.h"
++#include "Lawn/LawnMower.h"
++#include "Lawn/Plant.h"
++#include "Lawn/SeedPacket.h"
++#include "Lawn/System/Music.h"
++#include "Lawn/System/PlayerInfo.h"
++#include "Lawn/System/ProfileMgr.h"
++#include "Lawn/Widget/SeedChooserScreen.h"
++#include "Lawn/Zombie.h"
++#include "Sexy.TodLib/TodStringFile.h"
++#include "Sexy.TodLib/EffectSystem.h"
++#include "SexyAppFramework/Common.h"
++#include "SexyAppFramework/graphics/Graphics.h"
++#include "SexyAppFramework/graphics/GLImage.h"
++#include "SexyAppFramework/graphics/GLInterface.h"
++#include "SexyAppFramework/graphics/GLPlatform.h"
++#include "SexyAppFramework/widget/WidgetManager.h"
++
++#include <SDL.h>
++#include <algorithm>
++#include <cctype>
++#include <cstdlib>
++#include <iostream>
++#include <optional>
++#include <sstream>
++#include <string>
++#include <string_view>
++#include <vector>
++
++using namespace Sexy;
++
++bool (*gAppCloseRequest)();
++bool (*gAppHasUsedCheatKeys)();
++std::string (*gGetCurrentLevelName)();
++
++namespace
++{
++constexpr int kRows = 6;
++constexpr int kCols = 9;
++constexpr int kCells = kRows * kCols;
++constexpr int kSeedSlots = SEEDBANK_MAX;
++constexpr int kWaitAction = 0;
++constexpr int kPlantActionBegin = 1;
++constexpr int kShovelActionBegin = kPlantActionBegin + kSeedSlots * kCells;
++constexpr int kBoardClickActionBegin = kShovelActionBegin + kCells;
++constexpr int kCollectAction = kBoardClickActionBegin + kCells;
++constexpr int kActionCount = kCollectAction + 1;
++
++std::string Base64Encode(const std::vector<unsigned char>& bytes)
++{
++    static constexpr char alphabet[] =
++        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++    std::string encoded;
++    encoded.reserve((bytes.size() + 2) / 3 * 4);
++    for (std::size_t i = 0; i < bytes.size(); i += 3)
++    {
++        const uint32_t a = bytes[i];
++        const uint32_t b = i + 1 < bytes.size() ? bytes[i + 1] : 0;
++        const uint32_t c = i + 2 < bytes.size() ? bytes[i + 2] : 0;
++        const uint32_t value = (a << 16) | (b << 8) | c;
++        encoded.push_back(alphabet[(value >> 18) & 63]);
++        encoded.push_back(alphabet[(value >> 12) & 63]);
++        encoded.push_back(i + 1 < bytes.size() ? alphabet[(value >> 6) & 63] : '=');
++        encoded.push_back(i + 2 < bytes.size() ? alphabet[value & 63] : '=');
++    }
++    return encoded;
++}
++
++std::string FrameJson(LawnApp* app, int outputWidth, int outputHeight)
++{
++    if (outputWidth <= 0 || outputHeight <= 0)
++        return "";
++
++    outputWidth = std::clamp(outputWidth, 1, BOARD_WIDTH);
++    outputHeight = std::clamp(outputHeight, 1, BOARD_HEIGHT);
++    SDL_GL_MakeCurrent(
++        static_cast<SDL_Window*>(app->mWindow),
++        static_cast<SDL_GLContext>(app->mContext));
++
++    static GLuint framebuffer = 0;
++    static GLuint texture = 0;
++    if (framebuffer == 0)
++    {
++        glGenTextures(1, &texture);
++        glBindTexture(GL_TEXTURE_2D, texture);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
++        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
++        glTexImage2D(
++            GL_TEXTURE_2D,
++            0,
++            GL_RGBA,
++            BOARD_WIDTH,
++            BOARD_HEIGHT,
++            0,
++            GL_RGBA,
++            GL_UNSIGNED_BYTE,
++            nullptr);
++        glGenFramebuffers(1, &framebuffer);
++        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
++        glFramebufferTexture2D(
++            GL_FRAMEBUFFER,
++            GL_COLOR_ATTACHMENT0,
++            GL_TEXTURE_2D,
++            texture,
++            0);
++    }
++    else
++    {
++        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
++    }
++    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
++    {
++        glBindFramebuffer(GL_FRAMEBUFFER, 0);
++        return "";
++    }
++
++    glViewport(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
++    glClear(GL_COLOR_BUFFER_BIT);
++    Graphics graphics(app->mGLInterface->GetScreenImage());
++    app->mBoard->Draw(&graphics);
++
++    std::vector<unsigned char> rgba(
++        static_cast<std::size_t>(BOARD_WIDTH) * BOARD_HEIGHT * 4);
++    glReadPixels(
++        0,
++        0,
++        BOARD_WIDTH,
++        BOARD_HEIGHT,
++        GL_RGBA,
++        GL_UNSIGNED_BYTE,
++        rgba.data());
++    glBindFramebuffer(GL_FRAMEBUFFER, 0);
++    app->mGLInterface->UpdateViewport();
++
++    std::vector<unsigned char> rgb(static_cast<std::size_t>(outputWidth) * outputHeight * 3);
++    for (int y = 0; y < outputHeight; ++y)
++    {
++        const int sourceY = BOARD_HEIGHT - 1 - y * BOARD_HEIGHT / outputHeight;
++        for (int x = 0; x < outputWidth; ++x)
++        {
++            const int sourceX = x * BOARD_WIDTH / outputWidth;
++            const std::size_t sourceOffset =
++                (static_cast<std::size_t>(sourceY) * BOARD_WIDTH + sourceX) * 4;
++            const std::size_t offset = (static_cast<std::size_t>(y) * outputWidth + x) * 3;
++            rgb[offset] = rgba[sourceOffset];
++            rgb[offset + 1] = rgba[sourceOffset + 1];
++            rgb[offset + 2] = rgba[sourceOffset + 2];
++        }
++    }
++
++    std::ostringstream out;
++    out << ",\"frame\":{\"encoding\":\"rgb8-base64\""
++        << ",\"width\":" << outputWidth
++        << ",\"height\":" << outputHeight
++        << ",\"source_width\":" << BOARD_WIDTH
++        << ",\"source_height\":" << BOARD_HEIGHT
++        << ",\"data\":\"" << Base64Encode(rgb) << "\"}";
++    return out.str();
++}
++
++std::optional<int> JsonInt(std::string_view line, std::string_view key)
++{
++    const std::string quotedKey = "\"" + std::string(key) + "\"";
++    std::size_t pos = line.find(quotedKey);
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    pos = line.find(':', pos + quotedKey.size());
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    ++pos;
++    while (pos < line.size() && std::isspace(static_cast<unsigned char>(line[pos])))
++        ++pos;
++    std::size_t end = pos;
++    if (end < line.size() && (line[end] == '-' || line[end] == '+'))
++        ++end;
++    while (end < line.size() && std::isdigit(static_cast<unsigned char>(line[end])))
++        ++end;
++    if (end == pos)
++        return std::nullopt;
++    return std::stoi(std::string(line.substr(pos, end - pos)));
++}
++
++std::optional<std::vector<int>> JsonIntArray(std::string_view line, std::string_view key)
++{
++    const std::string quotedKey = "\"" + std::string(key) + "\"";
++    std::size_t pos = line.find(quotedKey);
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    pos = line.find('[', pos + quotedKey.size());
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    const std::size_t close = line.find(']', pos + 1);
++    if (close == std::string_view::npos)
++        return std::nullopt;
++
++    std::vector<int> values;
++    ++pos;
++    while (pos < close)
++    {
++        while (pos < close && (std::isspace(static_cast<unsigned char>(line[pos])) || line[pos] == ','))
++            ++pos;
++        if (pos >= close)
++            break;
++        std::size_t end = pos;
++        if (line[end] == '-' || line[end] == '+')
++            ++end;
++        while (end < close && std::isdigit(static_cast<unsigned char>(line[end])))
++            ++end;
++        if (end == pos || (end == pos + 1 && (line[pos] == '-' || line[pos] == '+')))
++            return std::nullopt;
++        values.push_back(std::stoi(std::string(line.substr(pos, end - pos))));
++        pos = end;
++    }
++    return values;
++}
++
++std::optional<std::string> JsonString(std::string_view line, std::string_view key)
++{
++    const std::string quotedKey = "\"" + std::string(key) + "\"";
++    std::size_t pos = line.find(quotedKey);
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    pos = line.find(':', pos + quotedKey.size());
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    pos = line.find('"', pos + 1);
++    if (pos == std::string_view::npos)
++        return std::nullopt;
++    const std::size_t end = line.find('"', pos + 1);
++    if (end == std::string_view::npos)
++        return std::nullopt;
++    return std::string(line.substr(pos + 1, end - pos - 1));
++}
++
++void ProtocolLine(const std::string& json)
++{
++    std::cout << "PVZWM " << json << '\n' << std::flush;
++}
++
++int TotalZombieHealth(Board* board)
++{
++    int total = 0;
++    Zombie* zombie = nullptr;
++    while (board->IterateZombies(zombie))
++    {
++        if (!zombie->mDead)
++            total += std::max(0, zombie->mBodyHealth) + std::max(0, zombie->mHelmHealth) + std::max(0, zombie->mShieldHealth);
++    }
++    return total;
++}
++
++int ActiveZombieCount(Board* board)
++{
++    int count = 0;
++    Zombie* zombie = nullptr;
++    while (board->IterateZombies(zombie))
++        count += !zombie->mDead;
++    return count;
++}
++
++int ActiveCoinCount(Board* board)
++{
++    int count = 0;
++    Coin* coin = nullptr;
++    while (board->IterateCoins(coin))
++        count += !coin->mDead;
++    return count;
++}
++
++bool HasCollectibleCoin(Board* board)
++{
++    Coin* coin = nullptr;
++    while (board->IterateCoins(coin))
++    {
++        if (!coin->mDead && !coin->mIsBeingCollected)
++            return true;
++    }
++    return false;
++}
++
++bool HasPlantAt(Board* board, int col, int row)
++{
++    Plant* plant = nullptr;
++    while (board->IteratePlants(plant))
++    {
++        if (!plant->mDead && plant->mPlantCol == col && plant->mRow == row)
++            return true;
++    }
++    return false;
++}
++
++void RemoveAllMowers(Board* board)
++{
++    board->mBonusLawnMowersRemaining = 0;
++    std::vector<LawnMower*> mowers;
++    LawnMower* mower = nullptr;
++    while (board->IterateLawnMowers(mower))
++        mowers.push_back(mower);
++    for (LawnMower* current : mowers)
++    {
++        if (!current->mDead)
++            current->Die();
++    }
++    board->ProcessDeleteQueue();
++}
++
++std::vector<int> LegalActions(Board* board)
++{
++    std::vector<int> legal{kWaitAction};
++    const int rows = board->StageHas6Rows() ? 6 : 5;
++
++    for (int slot = 0; slot < board->mSeedBank->mNumPackets && slot < kSeedSlots; ++slot)
++    {
++        SeedPacket& packet = board->mSeedBank->mSeedPackets[slot];
++        if (!packet.CanPickUp())
++            continue;
++        SeedType seedType = packet.mPacketType == SeedType::SEED_IMITATER ? packet.mImitaterType : packet.mPacketType;
++        for (int row = 0; row < rows; ++row)
++        {
++            for (int col = 0; col < kCols; ++col)
++            {
++                if (board->CanPlantAt(col, row, seedType) == PlantingReason::PLANTING_OK)
++                    legal.push_back(kPlantActionBegin + slot * kCells + row * kCols + col);
++            }
++        }
++    }
++
++    if (board->mShowShovel)
++    {
++        for (int row = 0; row < rows; ++row)
++        {
++            for (int col = 0; col < kCols; ++col)
++            {
++                if (HasPlantAt(board, col, row))
++                    legal.push_back(kShovelActionBegin + row * kCols + col);
++            }
++        }
++    }
++
++    if (board->mApp->IsWhackAZombieLevel() || board->mApp->IsScaryPotterLevel())
++    {
++        for (int row = 0; row < rows; ++row)
++        {
++            for (int col = 0; col < kCols; ++col)
++                legal.push_back(kBoardClickActionBegin + row * kCols + col);
++        }
++    }
++    if (HasCollectibleCoin(board))
++        legal.push_back(kCollectAction);
++    return legal;
++}
++
++std::string ObservationJson(
++    LawnApp* app,
++    int action,
++    int ticks,
++    int healthBefore,
++    int frameWidth = 0,
++    int frameHeight = 0)
++{
++    Board* board = app->mBoard;
++    if (board == nullptr)
++        return "{\"ok\":false,\"error\":\"board unavailable\"}";
++
++    const int healthAfter = TotalZombieHealth(board);
++    const bool won = app->mBoardResult == BoardResult::BOARDRESULT_WON;
++    const bool lost = app->mBoardResult == BoardResult::BOARDRESULT_LOST;
++    const double reward = (healthBefore < 0 ? 0.0 : static_cast<double>(healthBefore - healthAfter) / 1000.0)
++        + (won ? 100.0 : 0.0) - (lost ? 100.0 : 0.0);
++
++    std::ostringstream out;
++    out << "{\"ok\":true"
++        << ",\"protocol_version\":3"
++        << ",\"action_count\":" << kActionCount
++        << ",\"logical_width\":" << BOARD_WIDTH
++        << ",\"logical_height\":" << BOARD_HEIGHT
++        << ",\"level\":" << board->mLevel
++        << ",\"area\":" << ((board->mLevel - 1) / LEVELS_PER_AREA + 1)
++        << ",\"stage\":" << ((board->mLevel - 1) % LEVELS_PER_AREA + 1)
++        << ",\"scene\":" << static_cast<int>(app->mGameScene)
++        << ",\"board_result\":" << static_cast<int>(app->mBoardResult)
++        << ",\"done\":" << ((won || lost) ? "true" : "false")
++        << ",\"won\":" << (won ? "true" : "false")
++        << ",\"reward\":" << reward
++        << ",\"last_action\":" << action
++        << ",\"ticks\":" << ticks
++        << ",\"sun\":" << board->mSunMoney
++        << ",\"wave\":" << board->mCurrentWave
++        << ",\"plants_count\":" << board->mPlants.mSize
++        << ",\"zombies_count\":" << ActiveZombieCount(board)
++        << ",\"coins_count\":" << ActiveCoinCount(board)
++        << ",\"main_counter\":" << board->mMainCounter
++        << ",\"tutorial_state\":" << static_cast<int>(board->mTutorialState)
++        << ",\"zombie_countdown\":" << board->mZombieCountDown
++        << ",\"num_waves\":" << board->mNumWaves
++        << ",\"total_spawned_waves\":" << board->mTotalSpawnedWaves
++        << ",\"level_complete\":" << (board->mLevelComplete ? "true" : "false")
++        << ",\"zombie_health\":" << healthAfter
++        << ",\"mowers_ready\":" << board->CountUntriggerLawnMowers()
++        << ",\"mowers_triggered\":" << board->mTriggeredLawnMowers
++        << ",\"seed_bank_capacity\":" << board->mSeedBank->mNumPackets;
++
++    out << ",\"available_seed_types\":[";
++    bool firstAvailableSeed = true;
++    for (int raw = static_cast<int>(SeedType::SEED_PEASHOOTER);
++         raw < static_cast<int>(SeedType::SEED_IMITATER);
++         ++raw)
++    {
++        if (!app->HasSeedType(static_cast<SeedType>(raw)))
++            continue;
++        if (!firstAvailableSeed)
++            out << ',';
++        firstAvailableSeed = false;
++        out << raw;
++    }
++    out << ']';
++
++    out << ",\"seed_packets\":[";
++    for (int slot = 0; slot < board->mSeedBank->mNumPackets; ++slot)
++    {
++        if (slot > 0)
++            out << ',';
++        SeedPacket& packet = board->mSeedBank->mSeedPackets[slot];
++        out << "{\"slot\":" << slot
++            << ",\"type\":" << static_cast<int>(packet.mPacketType)
++            << ",\"active\":" << (packet.mActive ? "true" : "false")
++            << ",\"refresh\":" << packet.mRefreshCounter << '}';
++    }
++    out << ']';
++
++    out << ",\"plants\":[";
++    bool first = true;
++    Plant* plant = nullptr;
++    while (board->IteratePlants(plant))
++    {
++        if (plant->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"type\":" << static_cast<int>(plant->mSeedType)
++            << ",\"row\":" << plant->mRow
++            << ",\"col\":" << plant->mPlantCol
++            << ",\"health\":" << plant->mPlantHealth
++            << ",\"state\":" << static_cast<int>(plant->mState) << '}';
++    }
++    out << ']';
++
++    out << ",\"zombies\":[";
++    first = true;
++    Zombie* zombie = nullptr;
++    while (board->IterateZombies(zombie))
++    {
++        if (zombie->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"type\":" << static_cast<int>(zombie->mZombieType)
++            << ",\"row\":" << zombie->mRow
++            << ",\"x\":" << zombie->mPosX
++            << ",\"y\":" << zombie->mPosY
++            << ",\"body_health\":" << zombie->mBodyHealth
++            << ",\"helm_health\":" << zombie->mHelmHealth
++            << ",\"shield_health\":" << zombie->mShieldHealth
++            << ",\"phase\":" << static_cast<int>(zombie->mZombiePhase) << '}';
++    }
++    out << ']';
++
++    out << ",\"mowers\":[";
++    first = true;
++    LawnMower* mower = nullptr;
++    while (board->IterateLawnMowers(mower))
++    {
++        if (mower->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"row\":" << mower->mRow
++            << ",\"state\":" << static_cast<int>(mower->mMowerState)
++            << ",\"type\":" << static_cast<int>(mower->mMowerType)
++            << ",\"x\":" << mower->mPosX
++            << ",\"visible\":" << (mower->mVisible ? "true" : "false") << '}';
++    }
++    out << ']';
++
++    out << ",\"legal_actions\":[";
++    const std::vector<int> legal = LegalActions(board);
++    for (std::size_t i = 0; i < legal.size(); ++i)
++    {
++        if (i > 0)
++            out << ',';
++        out << legal[i];
++    }
++    out << ']';
++    out << FrameJson(app, frameWidth, frameHeight);
++    out << '}';
++    return out.str();
++}
++
++void CollectAll(Board* board)
++{
++    Coin* coin = nullptr;
++    while (board->IterateCoins(coin))
++    {
++        if (!coin->mDead && !coin->mIsBeingCollected)
++            coin->MouseDown(static_cast<int>(coin->mPosX), static_cast<int>(coin->mPosY), 1);
++    }
++}
++
++void ApplyAction(Board* board, int action)
++{
++    if (action == kWaitAction)
++        return;
++
++    if (action >= kPlantActionBegin && action < kShovelActionBegin)
++    {
++        const int offset = action - kPlantActionBegin;
++        const int slot = offset / kCells;
++        const int cell = offset % kCells;
++        const int row = cell / kCols;
++        const int col = cell % kCols;
++        if (slot < board->mSeedBank->mNumPackets)
++        {
++            board->mSeedBank->mSeedPackets[slot].MouseDown(0, 0, 1);
++            board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++        }
++        return;
++    }
++
++    if (action >= kShovelActionBegin && action < kBoardClickActionBegin)
++    {
++        const int cell = action - kShovelActionBegin;
++        const int row = cell / kCols;
++        const int col = cell % kCols;
++        board->PickUpTool(GameObjectType::OBJECT_TYPE_SHOVEL);
++        board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++        return;
++    }
++
++    if (action >= kBoardClickActionBegin && action < kCollectAction)
++    {
++        const int cell = action - kBoardClickActionBegin;
++        const int row = cell / kCols;
++        const int col = cell % kCols;
++        board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++        return;
++    }
++
++    if (action == kCollectAction)
++        CollectAll(board);
++}
++
++void UpdateEngineTick(LawnApp* app)
++{
++    ++app->mAppCounter;
++    app->mBoard->ProcessDeleteQueue();
++    if (app->mLoadingThreadCompleted && app->mEffectSystem != nullptr)
++        app->mEffectSystem->ProcessDeleteQueue();
++    app->mBoard->Update();
++    app->mMusic->MusicUpdate();
++}
++
++bool PickSeeds(LawnApp* app, SeedChooserScreen* chooser, const std::optional<std::vector<int>>& requestedSeeds)
++{
++    std::vector<SeedType> candidates;
++    Board* board = app->mBoard;
++    if (requestedSeeds.has_value())
++    {
++        if (static_cast<int>(requestedSeeds->size()) != board->mSeedBank->mNumPackets)
++            return false;
++        for (int raw : *requestedSeeds)
++        {
++            if (raw < static_cast<int>(SeedType::SEED_PEASHOOTER) ||
++                raw >= static_cast<int>(SeedType::SEED_IMITATER))
++                return false;
++            const SeedType seedType = static_cast<SeedType>(raw);
++            if (std::find(candidates.begin(), candidates.end(), seedType) != candidates.end())
++                return false;
++            candidates.push_back(seedType);
++        }
++    }
++    else
++    {
++        if (board->StageHasRoof())
++            candidates.push_back(SeedType::SEED_FLOWERPOT);
++        if (board->StageHasPool())
++            candidates.push_back(SeedType::SEED_LILYPAD);
++        if (board->StageIsNight())
++        {
++            candidates.push_back(SeedType::SEED_SUNSHROOM);
++            candidates.push_back(SeedType::SEED_PUFFSHROOM);
++            candidates.push_back(SeedType::SEED_FUMESHROOM);
++            candidates.push_back(SeedType::SEED_GRAVEBUSTER);
++        }
++        else
++        {
++            candidates.push_back(SeedType::SEED_SUNFLOWER);
++            candidates.push_back(SeedType::SEED_PEASHOOTER);
++            candidates.push_back(SeedType::SEED_REPEATER);
++            candidates.push_back(SeedType::SEED_SNOWPEA);
++        }
++        candidates.insert(candidates.end(), {
++            SeedType::SEED_WALLNUT,
++            SeedType::SEED_POTATOMINE,
++            SeedType::SEED_CHERRYBOMB,
++            SeedType::SEED_SQUASH,
++            SeedType::SEED_JALAPENO,
++            SeedType::SEED_CABBAGEPULT,
++            SeedType::SEED_KERNELPULT,
++            SeedType::SEED_MELONPULT,
++            SeedType::SEED_TALLNUT,
++            SeedType::SEED_BLOVER,
++            SeedType::SEED_CACTUS,
++        });
++    }
++
++    const int targetCount = board->mSeedBank->mNumPackets;
++    auto choose = [&](SeedType seedType)
++    {
++        if (chooser->mSeedsInBank >= targetCount || !app->HasSeedType(seedType))
++            return false;
++        ChosenSeed& chosen = chooser->mChosenSeeds[seedType];
++        if (chosen.mSeedState != ChosenSeedState::SEED_IN_CHOOSER || chooser->SeedNotAllowedToPick(seedType))
++            return false;
++        const int slot = chooser->mSeedsInBank;
++        chosen.mTimeStartMotion = 0;
++        chosen.mTimeEndMotion = 0;
++        chosen.mStartX = chosen.mX;
++        chosen.mStartY = chosen.mY;
++        chooser->GetSeedPositionInBank(slot, chosen.mEndX, chosen.mEndY);
++        chosen.mX = chosen.mEndX;
++        chosen.mY = chosen.mEndY;
++        chosen.mSeedState = ChosenSeedState::SEED_IN_BANK;
++        chosen.mSeedIndexInBank = slot;
++        ++chooser->mSeedsInBank;
++        return true;
++    };
++
++    for (SeedType seedType : candidates)
++    {
++        if (!choose(seedType) && requestedSeeds.has_value())
++            return false;
++    }
++    if (!requestedSeeds.has_value())
++    {
++        for (int raw = static_cast<int>(SeedType::SEED_PEASHOOTER);
++             raw < static_cast<int>(SeedType::NUM_SEEDS_IN_CHOOSER) && chooser->mSeedsInBank < targetCount;
++             ++raw)
++            choose(static_cast<SeedType>(raw));
++    }
++    if (chooser->mSeedsInBank != targetCount)
++        return false;
++    chooser->CloseSeedChooser();
++    return true;
++}
++
++bool ResetLevel(
++    LawnApp* app,
++    int level,
++    int seed,
++    bool disableMowers,
++    const std::optional<std::vector<int>>& requestedSeeds)
++{
++    if (level < 1 || level > FINAL_LEVEL || app->mPlayerInfo == nullptr)
++        return false;
++
++    app->mAppRandSeed = seed;
++    app->mRandSeed = static_cast<uint32_t>(seed);
++    SRand(static_cast<uint32_t>(seed));
++    std::srand(static_cast<unsigned int>(seed));
++    app->mPlayerInfo->SetLevel(level);
++    app->mGameMode = GameMode::GAMEMODE_ADVENTURE;
++    app->mMusic->mMusicDisabled = true;
++    app->MakeNewBoard();
++    app->mBoard->InitLevel();
++    app->mBoard->mCutScene->PreloadResources();
++    app->mBoard->mCutScene->PlaceLawnItems();
++    app->mBoard->RemoveCutsceneZombies();
++    if (app->IsFinalBossLevel())
++        app->mBoard->mChallenge->PlayBossEnter();
++    app->mBoard->ProcessDeleteQueue();
++    app->mBoardResult = BoardResult::BOARDRESULT_NONE;
++    app->mGameScene = GameScenes::SCENE_LEVEL_INTRO;
++    app->ShowSeedChooserScreen();
++    if (app->mBoard == nullptr)
++        return false;
++
++    if (app->mSeedChooserScreen != nullptr && app->mBoard->ChooseSeedsOnCurrentLevel() &&
++        !PickSeeds(app, app->mSeedChooserScreen, requestedSeeds))
++        return false;
++    app->StartPlaying();
++    UpdateEngineTick(app);
++    if (disableMowers)
++        RemoveAllMowers(app->mBoard);
++    return true;
++}
++}
++
++int main(int argc, char** argv)
++{
++    TodStringListSetColors(gLawnStringFormats, gLawnStringFormatCount);
++    gGetCurrentLevelName = LawnGetCurrentLevelName;
++    gAppCloseRequest = LawnGetCloseRequest;
++    gAppHasUsedCheatKeys = LawnHasUsedCheatKeys;
++    gExtractResourcesByName = Sexy::ExtractResourcesByName;
++
++    gLawnApp = new LawnApp();
++    gLawnApp->SetArgs(argc, argv);
++    gLawnApp->Init();
++    if (gLawnApp->mShutdown)
++    {
++        ProtocolLine("{\"ok\":false,\"error\":\"engine initialization failed\"}");
++        return 1;
++    }
++
++    gLawnApp->LoadingThreadProc();
++    if (gLawnApp->mPlayerInfo == nullptr)
++        gLawnApp->mPlayerInfo = gLawnApp->mProfileMgr->AddProfile("pvzwm");
++    gLawnApp->mLoadingThreadCompleted = true;
++    gLawnApp->mLoaded = true;
++
++    ProtocolLine("{\"ok\":true,\"ready\":true,\"protocol_version\":3,\"action_count\":" + std::to_string(kActionCount) + "}");
++
++    std::string line;
++    while (std::getline(std::cin, line))
++    {
++        const std::string command = JsonString(line, "cmd").value_or("");
++        if (command == "ping")
++        {
++            ProtocolLine("{\"ok\":true,\"pong\":true}");
++        }
++        else if (command == "reset")
++        {
++            const int level = JsonInt(line, "level").value_or(1);
++            const int seed = JsonInt(line, "seed").value_or(0);
++            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
++            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
++            const bool disableMowers = JsonInt(line, "disable_mowers").value_or(0) != 0;
++            const std::optional<std::vector<int>> seedTypes = JsonIntArray(line, "seed_types");
++            if (line.find("\"seed_types\"") != std::string::npos && !seedTypes.has_value())
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"invalid seed_types\"}");
++                continue;
++            }
++            if (!ResetLevel(gLawnApp, level, seed, disableMowers, seedTypes))
++                ProtocolLine("{\"ok\":false,\"error\":\"reset failed\"}");
++            else
++                ProtocolLine(ObservationJson(gLawnApp, kWaitAction, 1, -1, frameWidth, frameHeight));
++        }
++        else if (command == "step")
++        {
++            if (gLawnApp->mBoard == nullptr)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"reset required\"}");
++                continue;
++            }
++            const int action = JsonInt(line, "action").value_or(kWaitAction);
++            const int ticks = std::clamp(JsonInt(line, "ticks").value_or(1), 1, 10000);
++            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
++            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
++            int previousHealth = TotalZombieHealth(gLawnApp->mBoard);
++            int damageDealt = 0;
++            ApplyAction(gLawnApp->mBoard, action);
++            int currentHealth = TotalZombieHealth(gLawnApp->mBoard);
++            damageDealt += std::max(0, previousHealth - currentHealth);
++            for (int i = 0; i < ticks; ++i)
++            {
++                previousHealth = currentHealth;
++                UpdateEngineTick(gLawnApp);
++                currentHealth = TotalZombieHealth(gLawnApp->mBoard);
++                damageDealt += std::max(0, previousHealth - currentHealth);
++                if (gLawnApp->mBoardResult == BoardResult::BOARDRESULT_WON ||
++                    gLawnApp->mBoardResult == BoardResult::BOARDRESULT_LOST)
++                    break;
++            }
++            gLawnApp->mBoard->ProcessDeleteQueue();
++            const int rewardHealthBefore = TotalZombieHealth(gLawnApp->mBoard) + damageDealt;
++            ProtocolLine(ObservationJson(gLawnApp, action, ticks, rewardHealthBefore, frameWidth, frameHeight));
++        }
++        else if (command == "observe")
++        {
++            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
++            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
++            ProtocolLine(ObservationJson(gLawnApp, kWaitAction, 0, -1, frameWidth, frameHeight));
++        }
++        else if (command == "quit")
++        {
++            ProtocolLine("{\"ok\":true,\"bye\":true}");
++            break;
++        }
++        else
++        {
++            ProtocolLine("{\"ok\":false,\"error\":\"unknown command\"}");
++        }
++    }
++
++    gLawnApp->Shutdown();
++    delete gLawnApp;
++    return 0;
++}

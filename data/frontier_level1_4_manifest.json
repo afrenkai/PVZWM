@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-14",
+  "environment": "wszqkzqk/PvZ-Portable with PVZWM protocol v3",
+  "source": "pvz_portable_vector",
+  "vector_version": 2,
+  "state_dim": 585,
+  "action_dim": 650,
+  "frontier": "1-4",
+  "random_frontier_replay": {
+    "path": "data/frontier-level4-random-100.duckdb",
+    "sha256": "5b2409c3c74a9c9518c55450c5f8912e5128213ea65274665da468a367ab9496",
+    "episodes": 100,
+    "transitions": 40144,
+    "wins": 0,
+    "policy": "legality_aware_exploration_v1",
+    "seed_begin": 65000,
+    "seed_end": 65099
+  },
+  "world_model_replay": {
+    "path": "data/portable-vectors-rich-v2-success-level1-4-frontier.duckdb",
+    "sha256": "d418ee2ad41a78a17a129d1832be666f4bb34a19896be033befe6a291c70c229",
+    "episodes": 278,
+    "transitions": 109343,
+    "components": [
+      "data/portable-vectors-rich-v2-50.duckdb",
+      "data/success-curriculum-level1-3.duckdb",
+      "data/frontier-level4-random-100.duckdb"
+    ]
+  },
+  "ordered_policy": {
+    "checkpoint": "artifacts/success-level1-3-bc-f0p5-ppo-curriculum-r03-level4-75k.pt",
+    "sha256": "592a35a8dd2f71f5d75e4c86b460940626162c95cfa15ffcd4ae26edd12e3b3d",
+    "training_episodes": 195,
+    "training_wins": {"1-1": 23, "1-2": 4, "1-3": 1, "1-4": 0},
+    "training_episode_counts": {"1-1": 23, "1-2": 26, "1-3": 22, "1-4": 124}
+  },
+  "rollout_2048_policy": {
+    "checkpoint": "artifacts/frontier-level4-lh-g1-l1-e01-75k.pt",
+    "sha256": "02255a1cc08e22018988f45bfff392b99e18f1f8bceaa7616dc054ce0c89d352",
+    "historical_filename_note": "lh-g1-l1 is a stale requested-config label; the experiment row proves the effective values below",
+    "rollout_steps": 2048,
+    "effective_discount": 0.99,
+    "effective_gae_lambda": 0.95,
+    "training_steps": 75000,
+    "training_episodes": 181,
+    "training_wins": 0,
+    "heldout_generation": {
+      "episodes": 100,
+      "seed_begin": 76000,
+      "seed_end": 76099,
+      "wins": 2,
+      "win_seeds": [76089, 76097]
+    }
+  },
+  "reward_ranked_policy_iteration": {
+    "generation_0": {
+      "producer": "stochastic rollout-2048 PPO with effective discount 0.99 and GAE lambda 0.95",
+      "episodes": 100,
+      "transitions": 47156,
+      "wins": 2,
+      "selected_checkpoint": "artifacts/frontier-level4-gen0-bc-top20-f05.pt",
+      "selected_checkpoint_sha256": "cacc02b9191f293e3faaf797dbb916e1832a642347514b150c95fcf94bb3dd94",
+      "selection": "top 20% of episodes by return, 50% non-wait sampling"
+    },
+    "generation_1": {
+      "producer": "stochastic selected generation-0 policy",
+      "episodes": 100,
+      "transitions": 46694,
+      "wins": 2,
+      "win_seeds": [79024, 79083],
+      "selected_checkpoint": "artifacts/frontier-level4-gen1-bc-gen1-top20.pt",
+      "selected_checkpoint_sha256": "e016015093a385b3eb54ff8ddfade58b1a1291e679537835ac38dd4d66c6033f"
+    },
+    "successful_generations_replay": {
+      "path": "data/frontier-level4-elite-gen0-1-200.duckdb",
+      "sha256": "5290ef883c584ecabee747d9fe87d333cb5ac935838b14086919c533da0515fa",
+      "episodes": 200,
+      "transitions": 93850,
+      "wins": 4
+    },
+    "generation_2": {
+      "producer": "stochastic selected generation-1 policy",
+      "path": "data/frontier-level4-elite-gen2-100.duckdb",
+      "sha256": "dbbdc40f8d67e46a9baac6b0cab08706ea236cffe50738cf7c6a7b0a2a6a31aa",
+      "episodes": 100,
+      "transitions": 49213,
+      "wins": 0
+    }
+  },
+  "elite_augmented_world_model_replay": {
+    "path": "data/portable-vectors-rich-v2-level4-elite-augmented.duckdb",
+    "sha256": "53fc89d41db710d44f348e6cfb3156d5c5119442f5f204319a8ea6fcfa0b7510",
+    "episodes": 478,
+    "transitions": 203193,
+    "level_1_4_wins": 4
+  },
+  "logical_resolution_visual_win": {
+    "checkpoint": "artifacts/frontier-level4-lh-g1-l1-e01-75k.pt",
+    "seed": 85042,
+    "search_episodes": 43,
+    "return": 108.159,
+    "length": 1132,
+    "replay": "data/frontier-level4-video-search-85000.duckdb",
+    "video": "artifacts/level4-learned-win-native-800x600.mp4",
+    "video_sha256": "e868aac7c717039a2553d50ca9b2c112a87f5008576ad933445be911053dfe68",
+    "resolution": [800, 600],
+    "resolution_semantics": "fixed game canvas rendered offscreen; independent of the resizable SDL presentation"
+  },
+  "limitations": [
+    "The curriculum reached 1-4 only after real wins on 1-1, 1-2, and 1-3.",
+    "Learned stochastic policies now win 1-4 occasionally: two independent 100-episode generations each produced 2 wins, but a third generation produced none.",
+    "Six recorded successful 1-4 trajectories now exist across policy-iteration, visual, and IQL evaluation replays; they establish playability and useful demonstrations, not robust mastery.",
+    "Historical checkpoint names containing lh/g1/l1 are requested-configuration labels; their recorded experiment configs prove they actually used discount 0.99 and GAE lambda 0.95 before CLI forwarding was fixed.",
+    "Random exploration, RND variants, spatial PPO, and learned-model planners still produced no 1-4 wins in their matched sweeps.",
+    "The optional clipped-damage reward is checkpointed separately from raw bridge reward semantics."
+  ]
+}

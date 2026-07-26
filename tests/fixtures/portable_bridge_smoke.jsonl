@@ -1,0 +1,9 @@
+{"cmd":"ping"}
+{"cmd":"reset","level":1,"seed":7}
+{"cmd":"step","action":0,"ticks":200}
+{"cmd":"reset","level":11,"seed":7}
+{"cmd":"reset","level":21,"seed":7}
+{"cmd":"reset","level":31,"seed":7}
+{"cmd":"reset","level":41,"seed":7}
+{"cmd":"reset","level":50,"seed":7}
+{"cmd":"quit"}

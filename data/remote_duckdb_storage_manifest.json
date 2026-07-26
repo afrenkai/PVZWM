@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-15",
+  "execution_host": "ubuntu@129.213.92.137",
+  "local_database_workloads": false,
+  "source": {
+    "path": "data/authentic-stage-policy-pixels-1-10-to2-2.duckdb",
+    "sha256": "8cc70a43ecc936f8748f8e88353dce40d3b3d4fde497aec5518530341fb0c2fa",
+    "bytes": 1776562176,
+    "episodes": 6,
+    "transitions": 9537
+  },
+  "selected_compact_copy": {
+    "path": "data/authentic-stage-policy-pixels-1-10-to2-2-compact-rg4096.duckdb",
+    "sha256": "5ca7efe212140239d8d78bf59ebcbd6e6c0282f2deca04f78bdd4179c5f48d3b",
+    "bytes": 447492096,
+    "row_group_size": 4096,
+    "row_groups": 3,
+    "next_observation_nulls": 9531,
+    "stored_final_next_observations": 6,
+    "byte_level_equivalence_mismatches": 0,
+    "disk_reduction_fraction": 0.7481
+  },
+  "sequence_dataset_benchmark": {
+    "windows": 2375,
+    "repeats": 3,
+    "source_seconds": [22.9666, 29.4964, 25.7883],
+    "source_median_seconds": 25.7883,
+    "compact_default_row_group_seconds": [20.2817, 23.0218, 21.7787],
+    "compact_default_row_group_median_seconds": 21.7787,
+    "compact_rg4096_seconds": [18.6561, 19.2645, 19.02645],
+    "compact_rg4096_median_seconds": 19.02645,
+    "selected_speedup_fraction": 0.2622
+  },
+  "frame_storage_probe": {
+    "frames": 1000,
+    "duckdb_python_zlib": {
+      "bytes": 47984640,
+      "duckdb_blob_compression": "Uncompressed",
+      "median_decode_seconds": 0.7360989511944354
+    },
+    "duckdb_raw_numpy": {
+      "bytes": 58470400,
+      "duckdb_blob_compression": "Uncompressed",
+      "median_decode_seconds": 0.28967383597046137
+    },
+    "parquet_python_zlib_zstd": {
+      "bytes": 45162828,
+      "median_decode_seconds": 0.6682799691334367
+    },
+    "parquet_raw_numpy_zstd": {
+      "bytes": 9796808,
+      "median_decode_seconds": 0.34648718126118183
+    },
+    "interpretation": "Keep compact zlib DuckDB as the transactional collection source. Evaluate raw-frame Zstd Parquet as a derived immutable training snapshot because DuckDB does not natively compress these large BLOB values."
+  },
+  "implemented_layout": {
+    "episode_transaction": true,
+    "adjacent_next_frame_deduplication": true,
+    "redundant_transition_index_removed": true,
+    "checkpoint_threshold": "256MB",
+    "pixel_normalization_after_batched_device_transfer": true
+  },
+  "official_references": [
+    "https://duckdb.org/docs/current/guides/performance/how_to_tune_workloads",
+    "https://duckdb.org/docs/lts/guides/performance/indexing",
+    "https://duckdb.org/docs/stable/internals/storage",
+    "https://duckdb.org/docs/lts/sql/statements/checkpoint",
+    "https://duckdb.org/docs/stable/data/parquet/overview",
+    "https://duckdb.org/docs/current/data/parquet/tips"
+  ]
+}

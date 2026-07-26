@@ -1,0 +1,52 @@
+{
+  "database": "data/portable-vectors-rich-v2-policy-augmented.duckdb",
+  "remote_source": "/home/ubuntu/PVZWM/artifacts/portable-vectors-rich-v2-policy-augmented.duckdb",
+  "local_sha256": "0f87f2b0f7da55f39bcd6af137184400e2c3c8fe86622d5ae3e570e4b7547339",
+  "remote_sha256": "8be1357a44a0e2c891561fe96ac8431190c69306bfc0f8f6fc4c1a6cdc5da24e",
+  "protocol_version": 3,
+  "vector_version": 2,
+  "observation_shape": [585],
+  "action_count": 650,
+  "episodes": 100,
+  "transitions": 34718,
+  "adventure_stages": 50,
+  "terminal_wins": 2,
+  "terminal_losses": 50,
+  "action_counts": {
+    "wait": 30783,
+    "plant": 1485,
+    "collect": 2432,
+    "board_click": 18,
+    "shovel": 0
+  },
+  "positive_reward_transitions": 2940,
+  "sources": [
+    {
+      "database": "data/portable-vectors-rich-v2-50.duckdb",
+      "sha256": "707d2e95d1bd83bb3420587c1d321115a10e7704c38c82bc74ac62c97ec895e4",
+      "episodes": 50
+    },
+    {
+      "database": "data/authentic-rich-v2-ppo-level2-30.duckdb",
+      "sha256": "6591d9c6d4541e219b9ca04c77e39348dbb19b028cc1870987478bde6e0522c1",
+      "episodes": 30,
+      "level": "1-2",
+      "policy": "stochastic PPO",
+      "wins": 0
+    },
+    {
+      "database": "data/authentic-rich-v2-ppo-level2-seed32000-20.duckdb",
+      "sha256": "6cec8b5c1c11815d74400369cc9349fbb3af62c575d8f5bffe93165540526ea2",
+      "episodes": 20,
+      "level": "1-2",
+      "policy": "stochastic PPO",
+      "wins": 1
+    }
+  ],
+  "notes": [
+    "Local and remote databases were independently materialized from identical shards, so their DuckDB file hashes differ while logical row counts match.",
+    "The same whole-stage split seed keeps all 1-2 policy episodes on the training side.",
+    "The ten held-out stage IDs remain 1-4, 1-7, 1-10, 2-3, 2-9, 4-1, 4-3, 4-7, 5-6, and 5-7.",
+    "This shard improves policy diversity but is still dominated by wait actions and losing 1-2 trajectories."
+  ]
+}

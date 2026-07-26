@@ -1,0 +1,27 @@
+{
+  "stage_id": "1-1",
+  "fidelity": "partial",
+  "source_urls": [
+    "https://plantsvszombies.wiki.gg/wiki/Level_1-1",
+    "https://plantsvszombies.wiki.gg/wiki/Adventure_Mode/Strategy_guide"
+  ],
+  "known_constraints": {
+    "active_rows": [2],
+    "available_plants": ["Peashooter"],
+    "starting_sun": 150,
+    "basic_zombies": 5,
+    "reward_unlock": "Sunflower",
+    "spawn_requires_placements": 2
+  },
+  "engine": {
+    "background_type": 0,
+    "init_sun_value": 150,
+    "zombie_list": [
+      {"time": 20000, "map_y": 2, "name": "Zombie"},
+      {"time": 35000, "map_y": 2, "name": "Zombie"},
+      {"time": 50000, "map_y": 2, "name": "Zombie"},
+      {"time": 65000, "map_y": 2, "name": "Zombie"},
+      {"time": 80000, "map_y": 2, "name": "Zombie"}
+    ]
+  }
+}

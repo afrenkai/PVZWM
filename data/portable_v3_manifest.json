@@ -1,0 +1,29 @@
+{
+  "database": "data/portable-vectors-v3-50.duckdb",
+  "remote_source": "/home/ubuntu/PVZWM/artifacts/portable-vectors-v3-50.duckdb",
+  "sha256": "1a6194020f8f75a9ae127415c8eb7ae3f52ac09c5a59c8c0bdc9af6a545cefe9",
+  "source": "pvz_portable_vector",
+  "engine": "wszqkzqk/PvZ-Portable with the PVZWM pipe bridge",
+  "protocol_version": 3,
+  "episodes": 50,
+  "transitions": 12460,
+  "adventure_stages": 50,
+  "stage_range": "1-1..5-10",
+  "observation_shape": [250],
+  "vector_version": 1,
+  "observation_dtype": "float32",
+  "action_count": 650,
+  "ticks_per_step": 25,
+  "max_steps": 256,
+  "seed_begin": 14000,
+  "seed_end": 14049,
+  "wins": 1,
+  "known_losses": 3,
+  "notes": [
+    "Whole-stage grouped train/validation splits prevent level leakage.",
+    "This corpus uses the legacy compact semantic vector; vector v2 adds richer plant, zombie, and campaign state.",
+    "Protocol v3 restricts board-click legality to Whack-a-Zombie and Scary Potter modes.",
+    "The 5-10 reset explicitly spawns Dr. Zomboss after skipping the intro cutscene.",
+    "Most episodes are capped exploration trajectories, not completed levels."
+  ]
+}
