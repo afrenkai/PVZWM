@@ -1,0 +1,5 @@
+# Either categorical action ids or readable structured actions.
+sunflower 2 0
+wait
+peashooter 2 2
+wallnut 2 7

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "created_date": "2026-07-14",
+  "storage": {
+    "scope": "remote-only",
+    "path": "/home/ubuntu/PVZWM/data/broad_port_pixels.duckdb",
+    "bytes": 994586624,
+    "sha256": "10b4a4a248ec6f0421aee79e609747d15a47d8535e8852e6fa51ec88b9e94864"
+  },
+  "source": "python_port",
+  "upstream": "https://github.com/marblexu/PythonPlantsVsZombies",
+  "package": "plants-vs-zombies==0.0.5",
+  "observation": {
+    "dtype": "uint8",
+    "shape": [3, 96, 128]
+  },
+  "policy": "heuristic",
+  "automatic_sun_collection": true,
+  "episodes": 22,
+  "transitions": 9872,
+  "scenarios": [
+    {"id": "port-demo-0", "episodes": 4, "transitions": 396},
+    {"id": "port-demo-1", "episodes": 6, "transitions": 3132},
+    {"id": "port-demo-2", "episodes": 4, "transitions": 2348},
+    {"id": "1-1", "coverage": "partial", "episodes": 4, "transitions": 1644},
+    {"id": "1-2", "coverage": "partial", "episodes": 4, "transitions": 2352}
+  ],
+  "original_popcap_game_data": false
+}

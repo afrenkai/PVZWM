@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "retrieved_at": "2026-07-14",
+  "edition": "Plants vs. Zombies (original)",
+  "plants": {
+    "sunflower": {
+      "sun_cost": 50,
+      "recharge_seconds": 7.5,
+      "toughness": 300,
+      "first_sun_seconds": 7,
+      "sun_interval_seconds": 24,
+      "sun_amount": 25,
+      "source": "https://plantsvszombies.wiki.gg/wiki/Sunflower_(PvZ)"
+    },
+    "peashooter": {
+      "sun_cost": 100,
+      "recharge_seconds": 7.5,
+      "toughness": 300,
+      "shot_damage": 20,
+      "shot_interval_seconds": 1.425,
+      "source": "https://plantsvszombies.wiki.gg/wiki/Peashooter_(PvZ)"
+    },
+    "wallnut": {
+      "sun_cost": 50,
+      "recharge_seconds": 30,
+      "toughness": 4000,
+      "source": "https://plantsvszombies.wiki.gg/wiki/Wall-nut_(PvZ)"
+    }
+  },
+  "economy": {
+    "day_sun_fall_interval_seconds_approx": 10,
+    "source": "https://plantsvszombies.wiki.gg/wiki/Sun"
+  },
+  "notes": "Community-maintained factual metadata. No wiki text or game assets are redistributed."
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-15",
+  "path": "data/authentic-stage-policy-pixels-1-10-to2-2.duckdb",
+  "sha256": "8cc70a43ecc936f8748f8e88353dce40d3b3d4fde497aec5518530341fb0c2fa",
+  "bytes": 1776562176,
+  "source": "pvz_portable_learned_agent",
+  "engine": "wszqkzqk/PvZ-Portable with PVZWM protocol v3",
+  "observation_shape": [3, 120, 160],
+  "action_dim": 650,
+  "action_semantics": "collect_sun_first_v1",
+  "episodes": 6,
+  "transitions": 9537,
+  "levels": {
+    "1-10": {"episodes": 2, "transitions": 3355, "wins": 2},
+    "2-1": {"episodes": 2, "transitions": 2225, "wins": 2},
+    "2-2": {"episodes": 2, "transitions": 3957, "wins": 1}
+  },
+  "collection": {
+    "script": "scripts/collect_stage_policy_pixels.py",
+    "policy_manifest": "data/stage_policy_library.json",
+    "levels": ["1-10", "2-1", "2-2"],
+    "episodes_per_level": 2,
+    "seed": 230000,
+    "stochastic": true,
+    "episode_step_cap": 3600
+  },
+  "remote_storage": {
+    "preferred_path": "data/authentic-stage-policy-pixels-1-10-to2-2-compact-rg4096.duckdb",
+    "sha256": "5ca7efe212140239d8d78bf59ebcbd6e6c0282f2deca04f78bdd4179c5f48d3b",
+    "bytes": 447492096,
+    "row_group_size": 4096,
+    "byte_level_equivalence_mismatches": 0,
+    "evidence": "data/remote_duckdb_storage_manifest.json"
+  },
+  "role": "first authentic learned-policy pixel corpus for causal world-model training; includes both terminal wins and one terminal 2-2 loss"
+}

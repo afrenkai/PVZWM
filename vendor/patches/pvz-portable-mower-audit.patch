@@ -1,0 +1,96 @@
+--- a/src/PVZWMBridge.cpp
++++ b/src/PVZWMBridge.cpp
+@@ -11,6 +11,7 @@
+ #include "Lawn/Coin.h"
+ #include "Lawn/Challenge.h"
+ #include "Lawn/Cutscene.h"
++#include "Lawn/LawnMower.h"
+ #include "Lawn/Plant.h"
+ #include "Lawn/SeedPacket.h"
+ #include "Lawn/System/Music.h"
+@@ -264,6 +265,21 @@
+             return true;
+     }
+     return false;
++}
++
++void RemoveAllMowers(Board* board)
++{
++    board->mBonusLawnMowersRemaining = 0;
++    std::vector<LawnMower*> mowers;
++    LawnMower* mower = nullptr;
++    while (board->IterateLawnMowers(mower))
++        mowers.push_back(mower);
++    for (LawnMower* current : mowers)
++    {
++        if (!current->mDead)
++            current->Die();
++    }
++    board->ProcessDeleteQueue();
+ }
+ 
+ std::vector<int> LegalActions(Board* board)
+@@ -357,7 +373,9 @@
+         << ",\"num_waves\":" << board->mNumWaves
+         << ",\"total_spawned_waves\":" << board->mTotalSpawnedWaves
+         << ",\"level_complete\":" << (board->mLevelComplete ? "true" : "false")
+-        << ",\"zombie_health\":" << healthAfter;
++        << ",\"zombie_health\":" << healthAfter
++        << ",\"mowers_ready\":" << board->CountUntriggerLawnMowers()
++        << ",\"mowers_triggered\":" << board->mTriggeredLawnMowers;
+ 
+     out << ",\"seed_packets\":[";
+     for (int slot = 0; slot < board->mSeedBank->mNumPackets; ++slot)
+@@ -411,6 +429,24 @@
+     }
+     out << ']';
+ 
++    out << ",\"mowers\":[";
++    first = true;
++    LawnMower* mower = nullptr;
++    while (board->IterateLawnMowers(mower))
++    {
++        if (mower->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"row\":" << mower->mRow
++            << ",\"state\":" << static_cast<int>(mower->mMowerState)
++            << ",\"type\":" << static_cast<int>(mower->mMowerType)
++            << ",\"x\":" << mower->mPosX
++            << ",\"visible\":" << (mower->mVisible ? "true" : "false") << '}';
++    }
++    out << ']';
++
+     out << ",\"legal_actions\":[";
+     const std::vector<int> legal = LegalActions(board);
+     for (std::size_t i = 0; i < legal.size(); ++i)
+@@ -554,7 +590,7 @@
+     chooser->CloseSeedChooser();
+ }
+ 
+-bool ResetLevel(LawnApp* app, int level, int seed)
++bool ResetLevel(LawnApp* app, int level, int seed, bool disableMowers)
+ {
+     if (level < 1 || level > FINAL_LEVEL || app->mPlayerInfo == nullptr)
+         return false;
+@@ -584,6 +620,8 @@
+         PickStrategicSeeds(app, app->mSeedChooserScreen);
+     app->StartPlaying();
+     UpdateEngineTick(app);
++    if (disableMowers)
++        RemoveAllMowers(app->mBoard);
+     return true;
+ }
+ }
+@@ -627,7 +665,8 @@
+             const int seed = JsonInt(line, "seed").value_or(0);
+             const int frameWidth = JsonInt(line, "frame_width").value_or(0);
+             const int frameHeight = JsonInt(line, "frame_height").value_or(0);
+-            if (!ResetLevel(gLawnApp, level, seed))
++            const bool disableMowers = JsonInt(line, "disable_mowers").value_or(0) != 0;
++            if (!ResetLevel(gLawnApp, level, seed, disableMowers))
+                 ProtocolLine("{\"ok\":false,\"error\":\"reset failed\"}");
+             else
+                 ProtocolLine(ObservationJson(gLawnApp, kWaitAction, 1, -1, frameWidth, frameHeight));

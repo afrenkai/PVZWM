@@ -1,0 +1,12 @@
+{
+  "capture": [100, 100, 1500, 950],
+  "lawn": [250, 300, 1450, 900],
+  "seed_packets": {
+    "sunflower": [310, 190],
+    "peashooter": [380, 190],
+    "wallnut": [450, 190]
+  },
+  "shovel": [1350, 190],
+  "rows": 5,
+  "cols": 9
+}

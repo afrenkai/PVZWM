@@ -1,0 +1,281 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-15",
+  "environment": "wszqkzqk/PvZ-Portable with PVZWM protocol v3",
+  "routing_key": "level_id",
+  "purpose": "freeze the strongest verified stage specialists so frontier training cannot overwrite earlier competence",
+  "policies": {
+    "1-1": {
+      "checkpoint": "artifacts/frontier-level4-iql-flat-e07-s075-50ep.pt",
+      "sha256": "b9c8c8a21475e064a6ea929f50ced414b7d0ac12e920e52ee5eb327b93f9284b",
+      "heldout": {"episodes": 20, "wins": 20}
+    },
+    "1-2": {
+      "checkpoint": "artifacts/frontier-level4-iql-flat-e07-s075-50ep.pt",
+      "sha256": "b9c8c8a21475e064a6ea929f50ced414b7d0ac12e920e52ee5eb327b93f9284b",
+      "heldout": {"episodes": 20, "wins": 10}
+    },
+    "1-3": {
+      "checkpoint": "artifacts/frontier-level4-iql-flat-e07-s075-50ep.pt",
+      "sha256": "b9c8c8a21475e064a6ea929f50ced414b7d0ac12e920e52ee5eb327b93f9284b",
+      "heldout": {"episodes": 20, "wins": 6}
+    },
+    "1-4": {
+      "checkpoint": "artifacts/frontier-level4-iql-flat-e07-s075-50ep.pt",
+      "sha256": "b9c8c8a21475e064a6ea929f50ced414b7d0ac12e920e52ee5eb327b93f9284b",
+      "heldout": {"episodes": 100, "wins": 1}
+    },
+    "1-5": {
+      "checkpoint": "artifacts/frontier-level5-ppo-seq6-g1-l1-150k.pt",
+      "sha256": "15e97ebdaf7ff97ccd120371bfd2c5f3c38f0993d773b798af54e15dcff31257",
+      "heldout": {"episodes": 30, "wins": 30}
+    },
+    "1-6": {
+      "checkpoint": "artifacts/frontier-level5-ppo-seq6-g999-l995-150k.pt",
+      "sha256": "9e8004a5bc5e75b275a018fc94cf0f3b62687c063d2662e000fae5145c70f1c0",
+      "heldout_pooled": {"episodes": 80, "wins": 12}
+    },
+    "1-7": {
+      "checkpoint": "artifacts/frontier-level7-ppo-g999-rnd005-300k.pt",
+      "sha256": "20412134c43e35a410a54ecd0b2dd01235feab20ebd95f0fc1d710338577cf4f",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 25,
+        "wins": 5,
+        "mean_return": -50.31228000000004,
+        "episode_step_cap": 3600,
+        "batches": [
+          {"seed_begin": 125000, "episodes": 20, "wins": 4},
+          {"seed_begin": 135000, "episodes": 5, "wins": 1, "routed_library_smoke": true}
+        ]
+      }
+    },
+    "1-8": {
+      "checkpoint": "artifacts/frontier-level8-ppo-seq8-g999-rnd005-400k.pt",
+      "sha256": "258fa14a20a5d16f09203b83f6c574ddb027a28c369347d8931b7498e7499e69",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 25,
+        "wins": 2,
+        "mean_return": -82.00616,
+        "mean_length": 603.36,
+        "truncation_rate": 0.0,
+        "batches": [
+          {"seed_begin": 142000, "episodes": 20, "wins": 2},
+          {"seed_begin": 143000, "episodes": 5, "wins": 0, "independent_smoke": true}
+        ]
+      }
+    },
+    "1-9": {
+      "checkpoint": "artifacts/frontier-level9-ppo-seq9-g999-rnd005-400k.pt",
+      "sha256": "ce412ede8345b2f2a15d03500b7a9b42874f2db52ce07a0a15c97c27247dfbb1",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 25,
+        "wins": 3,
+        "mean_return": -71.77584,
+        "mean_length": 648.56,
+        "truncation_rate": 0.0,
+        "batches": [
+          {"seed_begin": 155000, "episodes": 20, "wins": 3},
+          {"seed_begin": 158000, "episodes": 5, "wins": 0, "independent_smoke": true}
+        ]
+      }
+    },
+    "1-10": {
+      "checkpoint": "artifacts/frontier-level10-ppo-seq10-g1-highent-400k.pt",
+      "sha256": "2efc1506d8a3375ebf6d29df64270b82aa28db57b0b7c849119791ab2eb630dc",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 20,
+        "wins": 14,
+        "mean_return": 107.32145,
+        "mean_length": 1392.65,
+        "truncation_rate": 0.0,
+        "seed_begin": 165000
+      }
+    },
+    "2-1": {
+      "checkpoint": "artifacts/frontier-level10-ppo-seq10-g1-highent-400k.pt",
+      "sha256": "2efc1506d8a3375ebf6d29df64270b82aa28db57b0b7c849119791ab2eb630dc",
+      "episode_step_cap": 3600,
+      "heldout_zero_shot": {
+        "episodes": 10,
+        "wins": 8,
+        "mean_return": 66.1177,
+        "mean_length": 1110.0,
+        "truncation_rate": 0.0,
+        "seed_begin": 166000,
+        "night_training_updates": 0
+      }
+    },
+    "2-2": {
+      "checkpoint": "artifacts/frontier-level12-ppo-seq12-default-400k.pt",
+      "sha256": "956da5de3e53668a89c4eb6e1fcd3e8fbffefa0ca29e384d1aef4a9426d12a52",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 20,
+        "wins": 13,
+        "mean_return": 50.53155,
+        "mean_length": 1710.95,
+        "truncation_rate": 0.0,
+        "seed_begin": 190000,
+        "database": "artifacts/frontier-level12-eval-default-190000-20.duckdb",
+        "database_sha256": "ca62ff7482b4e6bb70bb70f03290e4368eac47f4a7aca2c1f94de38ca2b6c7a0",
+        "action_semantics": "learned_collection_legacy"
+      },
+      "operational_heldout": {
+        "episodes": 20,
+        "wins": 12,
+        "mean_return": 40.16025,
+        "mean_length": 1617.3,
+        "truncation_rate": 0.0,
+        "seed_begin": 190000,
+        "database": "artifacts/frontier-level12-eval-default-autocollect-190000-20.duckdb",
+        "database_sha256": "7394300b3ade75e3bf1ff2bb18fa23a468b254e46c988a4f169b497ea61f3587",
+        "action_semantics": "collect_sun_first_v1"
+      }
+    },
+    "2-3": {
+      "checkpoint": "artifacts/frontier-level13-from-reinforce-default-400k.pt",
+      "sha256": "09b3e2f8a8a5a3fda80540afded7be09373e6c2fd7420917a067458d1224048a",
+      "episode_step_cap": 3600,
+      "heldout": {
+        "episodes": 20,
+        "wins": 20,
+        "mean_return": 109.3739,
+        "mean_length": 1162.6,
+        "truncation_rate": 0.0,
+        "seed_begin": 197000,
+        "database": "artifacts/frontier-level13-eval-reinforce-default-autocollect-197000-20.duckdb",
+        "database_sha256": "9d2b2b6b3efb16a44ab0c24add5e6ac5fbf653363c179e33c4a19f19113daead",
+        "action_semantics": "collect_sun_first_v1"
+      }
+    },
+      "2-4": {
+      "checkpoint": "artifacts/frontier-level13-from-reinforce-default-400k.pt",
+      "sha256": "09b3e2f8a8a5a3fda80540afded7be09373e6c2fd7420917a067458d1224048a",
+      "episode_step_cap": 3600,
+      "heldout_zero_shot": {
+        "episodes": 20,
+        "wins": 16,
+        "mean_return": 86.0382499999998,
+        "mean_length": 1947.2,
+        "truncation_rate": 0.0,
+        "seed_begin": 201000,
+        "database": "artifacts/frontier-level14-zero-shot-from-level13-default-autocollect-201000-20.duckdb",
+        "database_sha256": "d23532349d4d3a26f466ca7abfd47662a323fd72aacc4a7341ea42cfbf3e7b1f",
+        "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-5": {
+        "checkpoint": "artifacts/frontier-level15-spatial-conv-ppo-400k.pt",
+        "sha256": "0cde665229915279216333c1c09381c16b0a4302b0b0235260351c27f6fa5259",
+        "episode_step_cap": 3600,
+        "heldout": {
+          "episodes": 20,
+          "wins": 7,
+          "mean_return": 20.21300000000003,
+          "mean_length": 618.85,
+          "truncation_rate": 0.0,
+          "seed_begin": 226000,
+          "database": "artifacts/frontier-level15-spatial-conv-ppo-heldout-226000-20.duckdb",
+          "database_sha256": "df1ad0f217147affa8e1c1628934907f397d49b663efc8cdac16664e550bba68",
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-6": {
+        "checkpoint": "artifacts/frontier-level15-spatial-reinforce-200k.pt",
+        "sha256": "f316bc5a94163ddb5edd15cdb2fb310b1e189cec53121386a807306f8418c3e2",
+        "episode_step_cap": 3600,
+        "heldout_zero_shot": {
+          "episodes": 20,
+          "wins": 15,
+          "mean_return": 57.603299999999955,
+          "mean_length": 1021.4,
+          "truncation_rate": 0.0,
+          "seed_begin": 215000,
+          "database": "artifacts/frontier-level16-zero-shot-from-level15-reinforce-215000-20.duckdb",
+          "database_sha256": "383997128ad02255ee2bec3b76f78430788c4d10c6eccc560024c05a40f86e71",
+          "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-7": {
+        "checkpoint": "artifacts/frontier-level15-spatial-reinforce-200k.pt",
+        "sha256": "f316bc5a94163ddb5edd15cdb2fb310b1e189cec53121386a807306f8418c3e2",
+        "episode_step_cap": 3600,
+        "heldout_zero_shot": {
+          "episodes": 20,
+          "wins": 9,
+          "mean_return": 8.237949999999861,
+          "mean_length": 1566.3,
+          "truncation_rate": 0.0,
+          "seed_begin": 216000,
+          "database": "artifacts/frontier-level17-zero-shot-from-level15-reinforce-216000-20.duckdb",
+          "database_sha256": "034c866962821c64aadd8b770735b9379cf0cfad9b8b47dd4916daf68399b29a",
+          "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-8": {
+        "checkpoint": "artifacts/frontier-level15-spatial-reinforce-200k.pt",
+        "sha256": "f316bc5a94163ddb5edd15cdb2fb310b1e189cec53121386a807306f8418c3e2",
+        "episode_step_cap": 3600,
+        "heldout_zero_shot": {
+          "episodes": 20,
+          "wins": 13,
+          "mean_return": 38.75494999999995,
+          "mean_length": 1080.05,
+          "truncation_rate": 0.0,
+          "seed_begin": 217000,
+          "database": "artifacts/frontier-level18-zero-shot-from-level15-reinforce-217000-20.duckdb",
+          "database_sha256": "0abc81f18e209ff87855ad2bc32f9a652f7e00f17a229ccd17bb1f018c5e428a",
+          "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-9": {
+        "checkpoint": "artifacts/frontier-level15-spatial-reinforce-200k.pt",
+        "sha256": "f316bc5a94163ddb5edd15cdb2fb310b1e189cec53121386a807306f8418c3e2",
+        "episode_step_cap": 3600,
+        "heldout_zero_shot": {
+          "episodes": 20,
+          "wins": 12,
+          "mean_return": 44.223999999999855,
+          "mean_length": 1855.6,
+          "truncation_rate": 0.0,
+          "seed_begin": 218000,
+          "database": "artifacts/frontier-level19-zero-shot-from-level15-reinforce-218000-20.duckdb",
+          "database_sha256": "65b7489f225484a33f43add4bc63082fdc61d21d99bf86093a822ee8a847809b",
+          "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      },
+      "2-10": {
+        "checkpoint": "artifacts/frontier-level15-spatial-reinforce-200k.pt",
+        "sha256": "f316bc5a94163ddb5edd15cdb2fb310b1e189cec53121386a807306f8418c3e2",
+        "episode_step_cap": 3600,
+        "heldout_zero_shot": {
+          "episodes": 20,
+          "wins": 12,
+          "mean_return": 70.66090000000001,
+          "mean_length": 1312.7,
+          "truncation_rate": 0.0,
+          "seed_begin": 219000,
+          "database": "artifacts/frontier-level20-zero-shot-from-level15-reinforce-219000-20.duckdb",
+          "database_sha256": "349517cdabd8d73513d0f1335560839c5bd9c361a214618157a23d74d2687d61",
+          "training_updates_on_level": 0,
+          "action_semantics": "collect_sun_first_v1"
+        }
+      }
+  },
+  "limitations": [
+    "Earlier entries retain routed historical specialists; the selected level 1-10 checkpoint also solves 2-1 zero-shot, and matched-seed selection promotes a 400k-step default PPO continuation for 2-2.",
+    "Level 1-4 remains a rare-win specialist and is the weakest retained gate.",
+    "Levels 1-7 through 2-4 use the corrected 3,600-decision full-stage budget; the former 1,200-decision evaluation truncated healthy level 1-7 play before the final wave.",
+    "The selected spatial-convolution 2-5 actor is retained for that board-click minigame; the independently verified spatial REINFORCE actor supplies the zero-update 2-6 through 2-10 specialists.",
+    "No 3-1 policy is admitted until it produces an authentic terminal win; later stages remain locked."
+  ]
+}
