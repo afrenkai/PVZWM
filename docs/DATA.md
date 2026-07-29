@@ -105,6 +105,9 @@ modified.
 
 `data/replay_storage_manifest.json` records the remote revision, SHA-256 digest,
 size, schema, table counts, WAL status, and `hf://` URI for every database.
+`data/artifact_storage_manifest.json` separately records 1,070 trained
+checkpoints, logs, evaluation records, media files, and raw reference assets
+totaling 1,195,780,155 bytes.
 Restore the corpus with:
 
 ```bash
@@ -117,6 +120,13 @@ Verify every remote object against the Git-tracked manifest with:
 ```bash
 uv run --no-project --with huggingface-hub \
   python scripts/verify_replay_remote.py data/replay_storage_manifest.json
+```
+
+Verify the non-database research artifacts with:
+
+```bash
+uv run --no-project --with huggingface-hub \
+  python scripts/verify_artifact_remote.py data/artifact_storage_manifest.json
 ```
 
 Create a new non-destructive snapshot with
