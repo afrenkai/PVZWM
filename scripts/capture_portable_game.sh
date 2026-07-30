@@ -56,31 +56,16 @@ done < <(xdotool getwindowgeometry --shell "$window_id")
 
 echo "window_id=$window_id x=$window_x y=$window_y width=$window_width height=$window_height"
 
-# The game always draws an 800x600 logical canvas, but the SDL window is
-# resizable and fullscreen uses the desktop drawable. Current PvZ-Portable
-# preserves 4:3 with centered letterboxing. X11 window metadata is unreliable
-# for SDL_FULLSCREEN_DESKTOP without a window manager, so derive the centered
-# 4:3 presentation rectangle from the private display itself. Running Xvfb at
-# 800x600 keeps this crop pixel-identical to the logical canvas.
-read -r display_width display_height < <(xdotool getdisplaygeometry)
-if (( display_width * 3 > display_height * 4 )); then
-  capture_height="$display_height"
-  capture_width=$((display_height * 4 / 3))
-  capture_x=$(((display_width - capture_width) / 2))
-  capture_y=0
-elif (( display_width * 3 < display_height * 4 )); then
-  capture_width="$display_width"
-  capture_height=$((display_width * 3 / 4))
-  capture_x=0
-  capture_y=$(((display_height - capture_height) / 2))
-else
-  capture_width="$display_width"
-  capture_height="$display_height"
-  capture_x=0
-  capture_y=0
-fi
+# With no window manager, SDL_FULLSCREEN_DESKTOP can leave the requested
+# 800x600 geometry in X11 metadata while its drawable actually covers the Xvfb
+# root. The port stretches its 800x600 logical surface to that drawable; it does
+# not letterbox it. Capture the whole private display and scale it back to the
+# logical canvas. Running Xvfb at 800x600 avoids any intermediate resampling.
+read -r capture_width capture_height < <(xdotool getdisplaygeometry)
+capture_x=0
+capture_y=0
 
-echo "display=${display_width}x${display_height} presentation_x=$capture_x presentation_y=$capture_y presentation_width=$capture_width presentation_height=$capture_height output=${output_width}x${output_height}"
+echo "presentation_x=$capture_x presentation_y=$capture_y presentation_width=$capture_width presentation_height=$capture_height output=${output_width}x${output_height}"
 ffmpeg -hide_banner -loglevel error -y \
   -video_size "${capture_width}x${capture_height}" -draw_mouse 0 -f x11grab \
   -i "${DISPLAY}+${capture_x},${capture_y}" \

@@ -166,9 +166,9 @@ game and private pipe bridge:
 scripts/setup_portable_backend.sh
 ```
 
-Place `main.pak` and `properties/` under one resource directory. They are not
-stored in this repository. Verify representative sequential Adventure levels
-through the Python wrapper with `uv run`:
+The private repository includes `main.pak` and `properties/` under
+`data/pvz-goty`. Verify representative sequential Adventure levels through the
+Python wrapper with `uv run`:
 
 ```bash
 uv run scripts/smoke_portable.py \

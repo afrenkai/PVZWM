@@ -155,7 +155,6 @@ activemq-data/
 artifacts/
 data/*.duckdb
 data/*.duckdb.wal
-data/pvz-goty/
 data/raw/
 vendor/PvZ-Portable/
 env/

@@ -95,6 +95,44 @@ candidate, not a replacement for transactional collection. Exact runs and
 official documentation links are in
 `data/remote_duckdb_storage_manifest.json`.
 
+### Private replay snapshot
+
+The complete checkpointed replay corpus is stored in the private Hugging Face
+dataset `afrenkai/PVZWM-replays`. The immutable snapshot contains 470 DuckDB
+databases totaling 26,126,327,808 bytes. Fifteen copied WAL-backed databases
+were recovered and checkpointed before upload; the source files were not
+modified.
+
+`data/replay_storage_manifest.json` records the remote revision, SHA-256 digest,
+size, schema, table counts, WAL status, and `hf://` URI for every database.
+`data/artifact_storage_manifest.json` separately records 1,070 trained
+checkpoints, logs, evaluation records, media files, and raw reference assets
+totaling 1,195,780,155 bytes.
+Restore the corpus with:
+
+```bash
+uvx --from huggingface-hub hf download afrenkai/PVZWM-replays \
+  --repo-type dataset --local-dir pvzwm-replays
+```
+
+Verify every remote object against the Git-tracked manifest with:
+
+```bash
+uv run --no-project --with huggingface-hub \
+  python scripts/verify_replay_remote.py data/replay_storage_manifest.json
+```
+
+Verify the non-database research artifacts with:
+
+```bash
+uv run --no-project --with huggingface-hub \
+  python scripts/verify_artifact_remote.py data/artifact_storage_manifest.json
+```
+
+Create a new non-destructive snapshot with
+`scripts/snapshot_replay_corpus.py`. Do not back up a WAL without its matching
+database file.
+
 `data/portable-vectors-rich-v2-50.duckdb` is the current local semantic corpus.
 Its manifest records the SHA-256, exact stage/seed range, 585-value vector-v2
 layout, 650-action vocabulary, and protocol version. Protocol v3 removed ordinary-play
