@@ -3,7 +3,6 @@ from pathlib import Path
 
 from pvzwm.portable import PortableActionCodec
 
-
 _SPEC = importlib.util.spec_from_file_location(
     "summarize_portable_actions", Path("scripts/summarize_portable_actions.py")
 )

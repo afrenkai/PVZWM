@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 from pvzwm.portable_collection import parse_adventure_levels
 

@@ -1,14 +1,13 @@
 import importlib.util
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
 import torch
 
 from pvzwm.agents.dqn import QNetwork
 from pvzwm.agents.ppo import build_actor_critic
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "evolve_portable_loadout", Path("scripts/evolve_portable_loadout.py")

@@ -15,7 +15,6 @@ import duckdb
 from pvzwm.assets import WIKI_API
 from pvzwm.campaign import CampaignStage, campaign_stages
 
-
 CONTENT_LICENSE = "CC-BY-SA-4.0"
 USER_AGENT = "PVZWM/0.1 campaign research (local provenance archive)"
 

@@ -1,5 +1,5 @@
-import io
 import base64
+import io
 import json
 from pathlib import Path
 
@@ -84,6 +84,7 @@ def test_portable_client_consumes_records_already_buffered_by_text_io() -> None:
     )
     client = PortableBridgeClient(config, process_factory=lambda *args, **kwargs: fake)
     try:
+        assert client.ready["action_count"] == 650
         assert client.request({"cmd": "ping"})["pong"] is True
     finally:
         client.close()
@@ -107,6 +108,20 @@ def test_portable_debugger_wraps_the_private_pipe_process() -> None:
     assert command[4:6] == ["gdb", "--batch"]
     assert "thread apply all bt" in command
     assert command[-2:] == ["/opt/pvz/pvzwm-bridge", "-resdir=/opt/pvz/data"]
+
+
+def test_portable_process_command_accepts_isolated_save_directory() -> None:
+    config = PortableProcessConfig(
+        Path("/opt/pvz/pvzwm-bridge"),
+        Path("/opt/pvz/data"),
+        xvfb_run=None,
+        save_directory=Path("/tmp/pvz checkpoint"),
+    )
+    assert config.command() == [
+        "/opt/pvz/pvzwm-bridge",
+        "-resdir=/opt/pvz/data",
+        "-savedir=/tmp/pvz checkpoint",
+    ]
 
 
 def test_portable_observation_has_stable_vector_shape() -> None:
@@ -240,7 +255,10 @@ def test_portable_process_config_validates_seed_loadout() -> None:
 
 def test_portable_checkpoint_config_is_weights_only_safe(tmp_path: Path) -> None:
     config = PortableProcessConfig(
-        Path("bridge"), Path("resources"), seed_types=(1, 0, 16)
+        Path("bridge"),
+        Path("resources"),
+        seed_types=(1, 0, 16),
+        save_directory=Path("save-slot"),
     )
     checkpoint = tmp_path / "portable.pt"
     torch.save({"portable_config": config.checkpoint_dict()}, checkpoint)
@@ -252,6 +270,7 @@ def test_portable_checkpoint_config_is_weights_only_safe(tmp_path: Path) -> None
     assert restored["portable_config"]["max_steps"] == 3_600
     assert restored["portable_config"]["disable_mowers"] is False
     assert restored["portable_config"]["seed_types"] == (1, 0, 16)
+    assert restored["portable_config"]["save_directory"] == "save-slot"
     assert portable_process_config_from_checkpoint(
         {**restored["portable_config"], "seed_types": [1, 0, 16]}
     ).seed_types == (1, 0, 16)

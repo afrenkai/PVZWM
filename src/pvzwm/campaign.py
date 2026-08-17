@@ -35,6 +35,14 @@ _AREA_BY_WORLD = {
     5: "roof",
 }
 
+_SPECIAL_ADVENTURE_MODES = {
+    "1-5": "wallnut-bowling",
+    "2-5": "whack-a-zombie",
+    "3-5": "little-trouble",
+    "4-5": "vasebreaker",
+    "5-5": "bungee-blitz",
+}
+
 
 def campaign_stages() -> list[CampaignStage]:
     """Return the ordered PvZ1 Adventure 1-1 through 5-10 curriculum."""
@@ -49,8 +57,8 @@ def campaign_stages() -> list[CampaignStage]:
             mode = "standard"
             if world == 1 and level <= 3:
                 mode = "tutorial"
-            if level == 5:
-                mode = "bonus"
+            if stage_mode := _SPECIAL_ADVENTURE_MODES.get(f"{world}-{level}"):
+                mode = stage_mode
             if level == 10:
                 mode = "boss" if world == 5 else "conveyor"
             stages.append(

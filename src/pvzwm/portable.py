@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 import base64
-from collections import deque
-from dataclasses import dataclass, replace
-from enum import IntEnum
 import json
 import os
-from pathlib import Path
 import queue
 import subprocess
 import threading
-from typing import Any, Callable, IO, Sequence
+from collections import deque
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from enum import IntEnum
+from pathlib import Path
+from typing import IO, Any
 
 import numpy as np
-
 
 PROTOCOL_PREFIX = "PVZWM "
 
@@ -131,6 +131,7 @@ class PortableProcessConfig:
     reward_mode: str = "bridge"
     disable_mowers: bool = False
     seed_types: tuple[int, ...] | None = None
+    save_directory: Path | None = None
 
     def __post_init__(self) -> None:
         if not 1 <= self.level <= 50:
@@ -158,6 +159,8 @@ class PortableProcessConfig:
 
     def command(self) -> list[str]:
         game = [str(self.binary), f"-resdir={self.resources}"]
+        if self.save_directory is not None:
+            game.append(f"-savedir={self.save_directory}")
         if self.debugger:
             game = [
                 "gdb",
@@ -196,6 +199,9 @@ class PortableProcessConfig:
             "reward_mode": self.reward_mode,
             "disable_mowers": self.disable_mowers,
             "seed_types": self.seed_types,
+            "save_directory": (
+                None if self.save_directory is None else str(self.save_directory)
+            ),
         }
 
 
@@ -434,7 +440,7 @@ def parse_protocol_record(line: str) -> dict[str, Any] | None:
         return None
     value = json.loads(line[len(PROTOCOL_PREFIX) :])
     if not isinstance(value, dict):
-        raise ValueError("Portable bridge protocol record must be a JSON object")
+        raise TypeError("Portable bridge protocol record must be a JSON object")
     return value
 
 
@@ -475,6 +481,7 @@ class PortableBridgeClient:
         if int(ready.get("action_count", -1)) != PortableActionCodec.size:
             self.close()
             raise RuntimeError("Portable bridge and Python action codecs disagree")
+        self.ready = ready
 
     def request(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self.process.poll() is not None:
@@ -492,7 +499,7 @@ class PortableBridgeClient:
         except queue.Empty as error:
             raise TimeoutError("Timed out waiting for the portable bridge") from error
         if isinstance(record, BaseException):
-            raise RuntimeError(str(record)) from record
+            raise RuntimeError(str(record)) from record  # noqa: TRY004
         return record
 
     def _read_stdout(self) -> None:
@@ -510,7 +517,7 @@ class PortableBridgeClient:
                     + (f"\n{diagnostics}" if diagnostics else "")
                 )
             )
-        except BaseException as error:
+        except Exception as error:  # noqa: BLE001 - propagate reader failures to caller
             self._records.put(error)
 
     def close(self) -> None:
@@ -753,7 +760,7 @@ class PortableSequentialCurriculum:
             raise ValueError("Curriculum end must be between its start level and 50")
         if not 0.0 <= rehearsal_probability <= 1.0:
             raise ValueError("Curriculum rehearsal probability must be in [0, 1]")
-        normalized_completed = sorted(set(int(level) for level in completed_levels))
+        normalized_completed = sorted({int(level) for level in completed_levels})
         if any(level < 1 or level >= config.level for level in normalized_completed):
             raise ValueError("Completed rehearsal levels must precede the frontier")
         self.config = config

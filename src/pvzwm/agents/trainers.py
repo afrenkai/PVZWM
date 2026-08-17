@@ -9,21 +9,21 @@ import torch
 
 from pvzwm.agents.dqn import DQNBatch, MaskedDoubleDQN
 from pvzwm.agents.ppo import (
+    POLICY_ARCHITECTURES,
     GroupPolicyBatch,
-    PPOBatch,
     PolicyModel,
+    PPOBatch,
     RandomNetworkDistillation,
     RideNetwork,
-    VDNPPOBatch,
     VDNAutoregressiveSpatialConvActorCritic,
+    VDNPPOBatch,
     build_actor_critic,
-    POLICY_ARCHITECTURES,
     group_policy_loss,
     ppo_loss,
     vdn_ppo_loss,
 )
-from pvzwm.device import DeviceInfo
 from pvzwm.data.store import ReplayStore
+from pvzwm.device import DeviceInfo
 from pvzwm.domain import ActionCodec, GameConfig, Observation
 from pvzwm.env import PVZEnv
 from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble

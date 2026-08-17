@@ -9,6 +9,192 @@ reports structured state plus legal actions without opening a socket. The
 Python/Pygame [PythonPlantsVsZombies](https://github.com/marblexu/PythonPlantsVsZombies)
 adapter and clean-room symbolic environment remain useful fast testbeds.
 
+Project goals, active priorities, completed work, maintainer preferences,
+platform policy, and dependency decisions are maintained in
+[the project direction and engineering record](docs/PROJECT_DIRECTION.md).
+
+Build and play the GOTY-backed game locally:
+
+```bash
+# First-time Apple Silicon setup
+make macos-deps
+make setup
+
+# Every subsequent launch
+make play
+```
+
+`make play` (equivalently, `scripts/play_goty.sh`) is for a human at a terminal:
+it opens an 800×600 windowed real-time SDL game and runs until the player
+quits. It does not start an agent or impose a tick limit. Use
+`PVZ_GOTY_FULLSCREEN=1 make play` for an explicit fullscreen launch; the
+in-game option can still change modes during a session. The primary macOS
+build is native arm64; an untested best-effort Intel source configuration is
+available through `make setup-intel`. See
+[the GOTY fidelity contract](docs/GOTY_FIDELITY.md) for the exact target,
+verification boundary, and differential protocol.
+
+Named human save slots provide multiple independent profiles and mid-level
+resume points without changing the game inside a slot:
+
+```bash
+make play SAVE_SLOT=world1-a
+make play SAVE_SLOT=world1-b
+make save-slots
+make fork-save FROM=world1-a TO=before-1-5
+```
+
+Plain `make play` continues to use the native default save and does not move or
+overwrite it. `fork-save` copies a complete existing slot to a new name so
+several resumable checkpoints can branch from one playthrough; it refuses to
+overwrite an existing destination. Quit the game before forking a slot so all
+save files are closed and current.
+
+For isolated late-level human testing, a new slot can be bootstrapped through
+the native Metal engine and then reopened and profile-validated before it is
+installed:
+
+```bash
+make create-adventure-save SAVE_SLOT=before-5-10 LEVEL=5-10 DIRECT=1
+make play SAVE_SLOT=before-5-10
+```
+
+Without `DIRECT=1`, the bootstrap must legally win the preceding stage first.
+For the isolated 5-9 verifier trace, `SEED=1` is the pinned winning seed:
+`make create-adventure-save SAVE_SLOT=before-5-10-legal LEVEL=5-10 SEED=1`.
+That route also collects the native level award, waits through the reward
+transition, asks the original app logic to finalize the win, and requires the
+freshly reopened Metal profile to report 5-10 before installing the slot.
+The direct form uses the native Adventure initializer and profile serializer;
+it is explicitly test setup, not a claimed human checkpoint or teacher-data
+trajectory. Both forms refuse to overwrite an existing slot and leave the
+destination absent if any validation fails.
+
+The native mid-level serializer has an exhaustive Metal regression:
+
+```bash
+make test-saves
+```
+
+It saves and reloads all 50 Adventure boards and all 67 secondary modes that
+use a mid-level board file, requires exact state immediately after reload, and
+then compares another 1,000 uninterrupted engine ticks. Separate fresh-process
+checks cover Adventure and Zomboss resumes, including profile selection and
+the Continue dialog path. All verifier files live in temporary save
+directories and cannot touch a human slot.
+
+The complete Adventure campaign also has a legal terminal-state gate:
+
+```bash
+make test-playthroughs
+```
+
+It drives the ordinary native plant, collect, and board-click actions until
+each stage reports the authentic win result. All 50 stages through 5-10,
+including Vasebreaker, the pool/fog/roof conveyors, and Dr. Zomboss, currently
+win; the same 190,001 decisions across 1,900,010 engine ticks are mirrored
+through the OpenGL and Metal bridges and require exact gameplay state after
+every action. This deterministic verifier is test infrastructure, not an RL
+policy or a replacement for the human/original-GOTY comparison.
+
+For a human validation pass that can also become future imitation-learning
+data, launch an opt-in teacher run:
+
+```bash
+make play-teacher SAVE_SLOT=world1-clean
+```
+
+Play normally. On each Adventure reward screen, click `SAVE CHECKPOINT` before
+starting the next level. The button flushes the native profile and replayable
+PvZ input demo, records a level-boundary marker, and atomically snapshots the
+complete save slot. It disables itself after a successful save and changes to
+`CHECKPOINT SAVED`. The terminal prints a stable campaign directory under
+`~/Library/Application Support/PVZWM/teacher-runs/` plus a new replay segment
+for that launch. Quit at any checkpoint and rerun the same command to continue
+with the named save; later segments and checkpoints accumulate in the same
+campaign.
+The inspector decodes the native `users.dat` and `userN.dat` files in every
+snapshot and requires their stored Adventure level to match the checkpoint
+manifest. A complete native replay can then be checked with
+`make verify-teacher RUN='<printed directory>' EXPECTED=10`; this runs a visible
+Metal verifier through the final checkpoint boundary and fails on the first
+deterministic demo divergence. Add `BLACKOUT=1` to suppress intermediate Metal
+presentation and `HIDDEN=1` to keep the verifier out of the window-manager
+layout; the two optimizations are independent. A long idle tail recorded before
+the human process exits is intentionally outside that checkpoint claim.
+`make verify-teacher-resume RUN='<printed directory>' EXPECTED=10` independently
+copies and opens every checkpoint with the native Metal engine, verifies the
+engine-selected profile and next Adventure level, initializes the recovered
+stage, and confirms that the captured teacher artifacts remain byte-for-byte
+unchanged.
+After saving all levels through 5-10, the strict end-to-end gate is
+`make verify-teacher-campaign RUN='<printed campaign>' BLACKOUT=1 HIDDEN=1`.
+It requires the exact ordered 50-level sequence, including every embedded
+set-piece stage and the post-Zomboss `finished_adventure` state, replays every
+recorded segment, and resumes every checkpoint through Metal.
+Ordinary `make play` has no checkpoint button or input recording. See the
+[human playtest protocol](docs/HUMAN_PLAYTEST.md) for the short checklist and
+what to report when something differs from GOTY. A captured boundary can be
+resumed without mutating the teacher artifact using
+`make fork-checkpoint CHECKPOINT='<run>/checkpoints/after-1-4' TO=repro-1-5`.
+
+The native arm64 playable build uses SDL's native Metal renderer. It creates no
+OpenGL context and does not link the macOS OpenGL framework. Startup fails
+instead of silently falling back when the `metal` render driver is unavailable;
+the terminal prints the selected driver and acceleration/vsync status.
+Native demo replay offers separate controls: `-play-to-end` accelerates a
+visible replay under the distinct `PvZ Portable - Demo Replay` window title,
+`-demo-blackout` suppresses intermediate presentation, and `-demo-hidden`
+keeps an automated verifier out of a tiling window-manager layout. Blackout
+retains only the title-screen bootstrap draws required to start native resource
+loading. Both presentation-suppression flags are opt-in; an ordinary simulation
+or replay remains visible.
+
+The first finite secondary-mode terminal gate is also available:
+
+```bash
+make test-mode-playthroughs
+```
+
+It drives only native player controls and currently wins all five stages of
+Survival: Day, Night, Pool, and Fog, plus Seeing Stars, Whack-a-Zombie, Last Stand,
+Sunny Day, Big Time, Art Challenge Sunflower, Grave Danger, and all nine finite
+Vasebreaker and I, Zombie levels.
+Survival uses each of the four real inter-stage seed-chooser transitions and
+retains the lawn between stages. Every action and UI interaction is compared
+between the reference and Metal bridges, including the outlined Starfruit and
+mixed-plant art objectives, Last Stand's real Onslaught button, Grave Danger's
+complete 20-wave night board, and Vasebreaker's native break, pickup, and
+cursor-placement sequence. This is intentionally narrower than `make test-modes`,
+which validates initialization and early evolution for all 70 secondary modes;
+unlisted modes are not yet claimed as terminal-complete. The 29-mode gate covers
+1,154,190 engine ticks and 115,419 player decisions with exact reference/Metal
+state after every action.
+
+The human audio path includes GOTY's layered tracker-music behavior. The
+OpenMPT backend now applies the small tempo corrections used to keep the
+separate night main/drum streams synchronized, and resets that correction when
+a tune starts or resumes. A copyright-free synthetic MOD regression exercises
+the same C ABI:
+
+```bash
+make test-audio
+```
+
+Game-music selection is shared by human playback and the deterministic bridge.
+`make test-campaign` independently checks the selected tune across all 50
+Adventure stages, including the minigame and puzzle tracks, conveyor music only
+on 1-10 through 3-10, deliberate silence on Stormy Night 4-10, and the Zomboss
+theme on 5-10. `make test-modes` checks the same GOTY precedence across all 70
+secondary modes.
+
+Separately, an experimental allocation-free C11 batch simulator mirrors the clean-room
+environment's 181-action/192-feature contract. Metal is the first planned
+accelerator on Apple Silicon, with CUDA as the compatible Linux training-host
+backend. PvZ-Portable remains the full-game fidelity oracle while mechanics are
+ported and checked stage by stage. See
+[the native simulator roadmap](docs/NATIVE_SIMULATOR.md).
+
 Campaign research pages can be revision-pinned into DuckDB with `uv run pvzwm
 sync-campaign-wiki --pretty`. The archive retains source URLs, revision IDs,
 retrieval time, SHA-256, sequential predecessor/successor IDs, and the wiki's
@@ -16,11 +202,17 @@ CC-BY-SA-4.0 attribution boundary.
 
 The older Python port remains deliberately labelled as partial: it provides
 `1-1`, `1-2`, and mechanics-reduced proxies, not a full campaign. The new C++
-bridge has verified deterministic resets for representative day, night, pool,
-fog, roof, and boss stages, including intro-placed mowers, graves, and flower
-pots. Full sequential-policy validation across all 50 stages is still pending;
-special interaction modes need end-to-end action-coverage tests before being
-called solved.
+bridge has verified deterministic resets and active updates across all 50
+Adventure stages, including targeted interactions for each special stage
+class. A complete human playthrough and black-box comparison against the owned
+PopCap executable are still required before calling those stages solved.
+
+When the owned PopCap installation is available, initialize its exact local
+baseline with `make reference-baseline REFERENCE_ROOT='/path/to/PvZ'
+REFERENCE_VERSION=1.2.0.1073`. This hashes the installation and creates an
+ignored 134-scenario comparison plan without copying copyrighted game content
+or retaining the absolute installation path. See
+[GOTY fidelity](docs/GOTY_FIDELITY.md#original-game-reference).
 
 The architectural comparison is grounded in the current primary literature,
 especially [LeWorldModel](https://arxiv.org/abs/2603.19312),
@@ -176,6 +368,26 @@ uv run scripts/smoke_portable.py \
   --resources data/pvz-goty
 ```
 
+On macOS, build a hidden Metal observation bridge and compare it with the
+deterministic OpenGL oracle across representative environments:
+
+```bash
+make test-renderers
+make test-campaign
+make test-modes
+```
+
+`test-renderers` is the pixel-regression gate. `test-campaign` validates 150
+state checkpoints across all 50 Adventure stages and exercises each special
+Adventure interaction class. `test-modes` validates all 70 non-Adventure native
+game modes—including Survival, Mini-games, Limbo, Vasebreaker, I, Zombie, Zen
+Garden, and Tree of Wisdom—at ticks 0, 500, and 2,000, with exact gameplay
+state across OpenGL and Metal. Every automated fidelity tool uses an isolated
+temporary save directory and cannot collide with human play. The normal human
+executable remains Metal-only, and full product certification still requires
+complete playthrough traces and black-box comparison with a legally owned GOTY
+copy.
+
 Collect visual transitions from any sequential stage range into DuckDB:
 
 ```bash
@@ -220,8 +432,10 @@ uv run scripts/record_portable_agent.py \
 The game canvas is fixed at 800×600 logical pixels. PvZ-Portable initially
 creates an 800×600 desktop window, but that SDL window is resizable; its options
 dialog only controls fullscreen. Fullscreen uses the desktop drawable, and the
-current renderer fits the 4:3 game area inside it with centered letterboxing.
-Model observations bypass presentation scaling: the bridge renders directly
+native Metal renderer fits the 4:3 game area inside it with centered
+letterboxing. Gameplay remains on its original 100 Hz fixed simulation clock
+while the human presentation path is paced at 60 Hz. Model observations bypass
+presentation scaling: the separate bridge target currently renders directly
 into a private 800×600 OpenGL framebuffer inside the engine process, then
 deliberately downsamples only when a smaller training frame is requested. Human
 capture crops the centered 4:3 presentation rectangle before exporting canonical

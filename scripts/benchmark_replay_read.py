@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import gc
 import json
-from pathlib import Path
 import statistics
 import time
+from pathlib import Path
 
 from pvzwm.data.dataset import SequenceDataset
 

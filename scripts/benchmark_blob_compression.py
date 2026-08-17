@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import io
 import json
-from pathlib import Path
 import statistics
 import time
+from pathlib import Path
 
 import duckdb
 import numpy as np

@@ -9,7 +9,6 @@ from typing import Any
 
 import duckdb
 
-
 PROXY_CAMPAIGN_STAGE_IDS = (
     "1-3",
     "1-4",

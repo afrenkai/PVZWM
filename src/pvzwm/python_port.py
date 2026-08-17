@@ -9,18 +9,16 @@ from typing import Any
 
 import numpy as np
 
+from pvzwm.campaign import supported_campaign_stage_ids
+from pvzwm.campaign_proxy import build_campaign_proxy
 from pvzwm.domain import (
-    PLANT_RECHARGE_SECONDS,
     ActionCodec,
     ActionKind,
     GameConfig,
     Observation,
-    PVZAction,
     PlantKind,
+    PVZAction,
 )
-from pvzwm.campaign import supported_campaign_stage_ids
-from pvzwm.campaign_proxy import build_campaign_proxy
-
 
 UPSTREAM_URL = "https://github.com/marblexu/PythonPlantsVsZombies"
 PACKAGE_NAME = "plants-vs-zombies"
@@ -116,8 +114,7 @@ class PythonPortEnv:
             os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
         try:
             import pygame
-            from plants_vs_zombies import constants
-            from plants_vs_zombies import tool
+            from plants_vs_zombies import constants, tool
             from plants_vs_zombies.state import level
         except ImportError as error:
             raise RuntimeError(

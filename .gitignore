@@ -156,6 +156,7 @@ artifacts/
 data/*.duckdb
 data/*.duckdb.wal
 data/raw/
+data/reference/local/
 vendor/PvZ-Portable/
 env/
 venv/

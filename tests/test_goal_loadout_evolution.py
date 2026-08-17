@@ -1,9 +1,8 @@
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "evolve_goal_iql_loadout", Path("scripts/evolve_goal_iql_loadout.py")

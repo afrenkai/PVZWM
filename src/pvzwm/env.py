@@ -11,8 +11,8 @@ from pvzwm.domain import (
     ActionKind,
     GameConfig,
     Observation,
-    PVZAction,
     PlantKind,
+    PVZAction,
 )
 
 

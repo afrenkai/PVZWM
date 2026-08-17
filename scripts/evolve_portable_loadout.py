@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, replace
 import json
 import multiprocessing as mp
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Sequence
 

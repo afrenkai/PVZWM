@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, replace
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Sequence
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import replace
 import gzip
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np

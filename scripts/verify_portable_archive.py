@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
 import gzip
 import json
 import os
+from collections import Counter
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 

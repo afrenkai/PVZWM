@@ -8,20 +8,8 @@ from pathlib import Path
 
 import torch
 
-from pvzwm.assets import sync_wiki_assets
-from pvzwm.campaign import campaign_status, supported_campaign_stage_ids
-from pvzwm.agents.policies import HeuristicPolicy, RandomPolicy
 from pvzwm.agents.dqn import MaskedDoubleDQN
-from pvzwm.agents.ppo import (
-    ActorCritic,
-    AutoregressiveSpatialConvActorCritic,
-    POLICY_ARCHITECTURES,
-    PolicyModel,
-    SpatialActorCritic,
-    SpatialConvActorCritic,
-    VDNAutoregressiveSpatialConvActorCritic,
-    build_actor_critic,
-)
+from pvzwm.agents.imagination import FlowPPOTrainConfig, train_flow_ppo
 from pvzwm.agents.offline import (
     BehaviorCloneConfig,
     DiscreteIQLConfig,
@@ -29,7 +17,17 @@ from pvzwm.agents.offline import (
     train_discrete_iql,
 )
 from pvzwm.agents.planning import CategoricalCEMPlanner
-from pvzwm.agents.imagination import FlowPPOTrainConfig, train_flow_ppo
+from pvzwm.agents.policies import HeuristicPolicy, RandomPolicy
+from pvzwm.agents.ppo import (
+    POLICY_ARCHITECTURES,
+    ActorCritic,
+    AutoregressiveSpatialConvActorCritic,
+    PolicyModel,
+    SpatialActorCritic,
+    SpatialConvActorCritic,
+    VDNAutoregressiveSpatialConvActorCritic,
+    build_actor_critic,
+)
 from pvzwm.agents.trainers import (
     AgentTrainResult,
     DQNTrainConfig,
@@ -41,38 +39,15 @@ from pvzwm.agents.trainers import (
     train_group_policy,
     train_ppo,
 )
-from pvzwm.data.store import ReplayStore, Transition
+from pvzwm.assets import sync_wiki_assets
+from pvzwm.campaign import campaign_status, supported_campaign_stage_ids
 from pvzwm.data.audit import audit_data
+from pvzwm.data.store import ReplayStore, Transition
 from pvzwm.device import select_device
 from pvzwm.distributed import initialize_distributed
 from pvzwm.domain import ActionCodec, GameConfig
 from pvzwm.env import PVZEnv
 from pvzwm.evaluation import build_world_model, evaluate_world_model
-from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
-from pvzwm.models.delta import PixelDeltaWorldModel
-from pvzwm.models.flow import RepresentationFlowWorldModel
-from pvzwm.models.jepa import ActionConditionedJEPA, ConvEncoder, VectorEncoder
-from pvzwm.models.lewm import ActionConditionedLeWorldModel
-from pvzwm.models.rssm import RecurrentStateSpaceModel
-from pvzwm.models.token import CausalTokenWorldModel
-from pvzwm.rendering import SymbolicRenderer
-from pvzwm.perception import (
-    BoardPerceptionModel,
-    ObservationVectorLayout,
-    PerceptionTrainConfig,
-    legal_mask_from_vector,
-    train_perception,
-)
-from pvzwm.python_port import PythonPortConfig, PythonPortEnv, UPSTREAM_URL
-from pvzwm.portable import (
-    PortableEnv,
-    PortableLoadoutCurriculum,
-    PortableProcessConfig,
-    PortableSequentialCurriculum,
-    collect_sun_first_mask,
-    portable_process_config_from_checkpoint,
-)
-from pvzwm.portable_archive import PortableArchiveCurriculum
 from pvzwm.live import (
     LiveGameAdapter,
     NullPointerBackend,
@@ -82,6 +57,31 @@ from pvzwm.live import (
     parse_actions,
     record_live_actions,
 )
+from pvzwm.models.delta import PixelDeltaWorldModel
+from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
+from pvzwm.models.flow import RepresentationFlowWorldModel
+from pvzwm.models.jepa import ActionConditionedJEPA, ConvEncoder, VectorEncoder
+from pvzwm.models.lewm import ActionConditionedLeWorldModel
+from pvzwm.models.rssm import RecurrentStateSpaceModel
+from pvzwm.models.token import CausalTokenWorldModel
+from pvzwm.perception import (
+    BoardPerceptionModel,
+    ObservationVectorLayout,
+    PerceptionTrainConfig,
+    legal_mask_from_vector,
+    train_perception,
+)
+from pvzwm.portable import (
+    PortableEnv,
+    PortableLoadoutCurriculum,
+    PortableProcessConfig,
+    PortableSequentialCurriculum,
+    collect_sun_first_mask,
+    portable_process_config_from_checkpoint,
+)
+from pvzwm.portable_archive import PortableArchiveCurriculum
+from pvzwm.python_port import UPSTREAM_URL, PythonPortConfig, PythonPortEnv
+from pvzwm.rendering import SymbolicRenderer
 from pvzwm.training import TrainConfig, train_sequence_model, train_transition_model
 from pvzwm.wiki_levels import sync_level_wiki
 

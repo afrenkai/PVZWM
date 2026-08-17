@@ -1,3 +1,6 @@
+import importlib.util
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -6,10 +9,6 @@ from pvzwm.agents.go_explore import (
     TrajectoryArchive,
 )
 from pvzwm.portable import PortableActionCodec
-
-import importlib.util
-from pathlib import Path
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "run_portable_go_explore", Path("scripts/run_portable_go_explore.py")

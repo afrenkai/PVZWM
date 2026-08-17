@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from pvzwm.domain import ActionCodec, GameConfig, PLANT_COSTS
+from pvzwm.domain import PLANT_COSTS, ActionCodec, GameConfig
 from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
 
 

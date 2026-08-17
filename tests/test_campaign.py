@@ -18,6 +18,19 @@ def test_campaign_manifest_uses_sequential_stage_ids() -> None:
     assert [stage.stage_id for stage in stages[9:12]] == ["1-10", "2-1", "2-2"]
     assert next(stage for stage in stages if stage.stage_id == "3-1").rows == 6
     assert next(stage for stage in stages if stage.stage_id == "4-5").area == "night"
+    assert next(stage for stage in stages if stage.stage_id == "1-5").mode == (
+        "wallnut-bowling"
+    )
+    assert next(stage for stage in stages if stage.stage_id == "2-5").mode == (
+        "whack-a-zombie"
+    )
+    assert next(stage for stage in stages if stage.stage_id == "3-5").mode == (
+        "little-trouble"
+    )
+    assert next(stage for stage in stages if stage.stage_id == "4-5").mode == "vasebreaker"
+    assert next(stage for stage in stages if stage.stage_id == "5-5").mode == (
+        "bungee-blitz"
+    )
     assert next(stage for stage in stages if stage.stage_id == "5-10").mode == "boss"
     assert stages[0].implementation == "partial"
     assert stages[1].implementation == "partial"

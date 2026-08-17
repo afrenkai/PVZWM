@@ -9,13 +9,13 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from pvzwm.agents.latent_goals import encode_vector_states, nearest_cluster
 from pvzwm.agents.ppo import (
     AutoregressiveSpatialConvActorCritic,
     SpatialConvActorCritic,
 )
 from pvzwm.data.store import ReplayStore, Transition
 from pvzwm.device import DeviceInfo
-from pvzwm.agents.latent_goals import encode_vector_states, nearest_cluster
 from pvzwm.models.jepa import ActionConditionedJEPA
 
 
@@ -558,7 +558,6 @@ def train_goal_iql(
             done = batch.done.to(device_info.device)
             legal_mask = batch.legal_mask.to(device_info.device)
             state_goal = torch.cat([state, goal], dim=-1)
-            next_state_goal = torch.cat([next_state, goal], dim=-1)
 
             with torch.no_grad():
                 target_q = torch.minimum(

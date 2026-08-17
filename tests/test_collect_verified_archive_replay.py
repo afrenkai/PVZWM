@@ -1,12 +1,11 @@
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 
 from pvzwm.agents.go_explore import ArchiveCell
 from pvzwm.portable import PortableActionCodec, PortableProcessConfig
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "collect_verified_archive_replay",

@@ -1,5 +1,5 @@
-import io
 import base64
+import io
 from pathlib import Path
 
 import numpy as np

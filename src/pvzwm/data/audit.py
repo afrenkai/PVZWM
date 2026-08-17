@@ -58,6 +58,32 @@ def _database_sources(path: Path) -> list[dict[str, object]]:
     return results
 
 
+def _reference_manifests(root: Path) -> list[dict[str, object]]:
+    manifests: list[dict[str, object]] = []
+    if not root.exists():
+        return manifests
+    for path in sorted(root.rglob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(payload, dict) or payload.get("kind") != "pvz-goty-reference":
+            continue
+        manifests.append(
+            {
+                "path": str(path),
+                "content_id": payload.get("content_id"),
+                "baseline_kind": payload.get("baseline_kind"),
+                "declared_version": payload.get("declared_version"),
+                "distribution": payload.get("distribution"),
+                "ready_for_black_box_comparison": bool(
+                    payload.get("ready_for_black_box_comparison")
+                ),
+            }
+        )
+    return manifests
+
+
 def audit_data(data_root: str | Path = "data") -> dict[str, object]:
     root = Path(data_root)
     databases: list[dict[str, object]] = []
@@ -94,7 +120,11 @@ def audit_data(data_root: str | Path = "data") -> dict[str, object]:
         for path in raw_root.rglob("*")
         if path.is_file() and path.name != "manifest.json"
     ] if raw_root.exists() else []
-    reference_files = list((root / "reference").glob("*.json")) if (root / "reference").exists() else []
+    reference_root = root / "reference"
+    reference_files = (
+        list(reference_root.rglob("*.json")) if reference_root.exists() else []
+    )
+    reference_manifests = _reference_manifests(reference_root)
     installations = discover_macos_pvz()
     return {
         "data_root": str(root),
@@ -104,6 +134,11 @@ def audit_data(data_root: str | Path = "data") -> dict[str, object]:
         "python_port_transitions": python_port_transitions,
         "wiki_asset_files": len(raw_files),
         "reference_metadata_files": len(reference_files),
+        "reference_manifests": reference_manifests,
+        "ready_for_original_game_comparison": any(
+            manifest["ready_for_black_box_comparison"]
+            for manifest in reference_manifests
+        ),
         "databases": databases,
         "ready_for_original_game_training": original_transitions > 0,
         "ready_for_python_port_training": python_port_transitions > 0,

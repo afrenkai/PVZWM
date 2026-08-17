@@ -1,10 +1,9 @@
 import argparse
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import pytest
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "eval_goal_iql_frontier", Path("scripts/eval_goal_iql_frontier.py")

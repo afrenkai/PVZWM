@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from pvzwm.agents.go_explore import ArchiveCell
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "verify_portable_archive", Path("scripts/verify_portable_archive.py")

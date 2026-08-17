@@ -1,7 +1,6 @@
 import importlib.util
 from pathlib import Path
 
-
 _SPEC = importlib.util.spec_from_file_location(
     "run_full_campaign", Path("scripts/run_full_campaign.py")
 )

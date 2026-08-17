@@ -11,7 +11,6 @@ from typing import Callable
 
 from PIL import Image
 
-
 WIKI_API = "https://plantsvszombies.wiki.gg/api.php"
 DEFAULT_PVZ1_ICON_TITLES = (
     "File:Peashooter1.png",

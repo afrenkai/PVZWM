@@ -2,19 +2,6 @@ import numpy as np
 import pytest
 import torch
 
-from pvzwm.agents.trainers import (
-    _AdaptiveIntrinsicWeight,
-    AgentTrainResult,
-    DQNTrainConfig,
-    DynaDQNTrainConfig,
-    GroupPolicyTrainConfig,
-    PPOTrainConfig,
-    group_relative_advantages,
-    train_dqn,
-    train_dyna_dqn,
-    train_group_policy,
-    train_ppo,
-)
 from pvzwm.agents.imagination import FlowPPOTrainConfig, train_flow_ppo
 from pvzwm.agents.offline import (
     BehaviorCloneConfig,
@@ -29,10 +16,23 @@ from pvzwm.agents.ppo import (
     GroupPolicyBatch,
     SpatialActorCritic,
     SpatialConvActorCritic,
-    VDNPPOBatch,
     VDNAutoregressiveSpatialConvActorCritic,
+    VDNPPOBatch,
     group_policy_loss,
     vdn_ppo_loss,
+)
+from pvzwm.agents.trainers import (
+    AgentTrainResult,
+    DQNTrainConfig,
+    DynaDQNTrainConfig,
+    GroupPolicyTrainConfig,
+    PPOTrainConfig,
+    _AdaptiveIntrinsicWeight,
+    group_relative_advantages,
+    train_dqn,
+    train_dyna_dqn,
+    train_group_policy,
+    train_ppo,
 )
 from pvzwm.data.store import ReplayStore, Transition
 from pvzwm.device import DeviceInfo

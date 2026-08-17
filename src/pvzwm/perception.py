@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from pvzwm.device import DeviceInfo
-from pvzwm.domain import PLANT_COSTS, ActionCodec, ActionKind, GameConfig, Observation
+from pvzwm.domain import PLANT_COSTS, ActionCodec, ActionKind, GameConfig
 from pvzwm.env import PVZEnv
 from pvzwm.models.jepa import ConvEncoder
 from pvzwm.rendering import SymbolicRenderer

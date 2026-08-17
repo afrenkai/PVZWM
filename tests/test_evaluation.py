@@ -5,8 +5,8 @@ import torch
 
 from pvzwm.data.store import ReplayStore, Transition
 from pvzwm.evaluation import build_world_model, evaluate_world_model
-from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
 from pvzwm.models.delta import PixelDeltaWorldModel
+from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
 from pvzwm.models.flow import RepresentationFlowWorldModel
 from pvzwm.models.jepa import ActionConditionedJEPA, ConvEncoder, VectorEncoder
 from pvzwm.models.lewm import ActionConditionedLeWorldModel

@@ -8,14 +8,13 @@ import torch.nn.functional as F
 from torch import nn
 
 from pvzwm.data.store import ReplayStore, Transition
-from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
 from pvzwm.models.delta import PixelDeltaWorldModel
+from pvzwm.models.dynamics import DeterministicDynamics, DynamicsEnsemble
 from pvzwm.models.flow import RepresentationFlowWorldModel
 from pvzwm.models.jepa import ActionConditionedJEPA, ConvEncoder, VectorEncoder
 from pvzwm.models.lewm import ActionConditionedLeWorldModel
 from pvzwm.models.rssm import RecurrentStateSpaceModel
 from pvzwm.models.token import CausalTokenWorldModel
-
 
 WorldModel = (
     DeterministicDynamics

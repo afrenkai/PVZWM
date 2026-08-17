@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from pvzwm.distributed import DistributedContext, initialize_distributed
+from pvzwm.distributed import initialize_distributed
 
 
 def test_single_process_distributed_context_is_a_noop(monkeypatch) -> None:

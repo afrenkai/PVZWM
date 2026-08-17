@@ -12,7 +12,6 @@ from typing import Iterator
 import duckdb
 import numpy as np
 
-
 _COMPRESSED_ARRAY_MAGIC = b"PVZWM-ZLIB-1\0"
 _REPLAY_ROW_GROUP_SIZE = 4_096
 

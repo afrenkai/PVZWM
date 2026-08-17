@@ -1,7 +1,6 @@
 import importlib.util
 from pathlib import Path
 
-
 _SPEC = importlib.util.spec_from_file_location(
     "audit_pool_archive", Path("scripts/audit_pool_archive.py")
 )

@@ -7,21 +7,21 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from pvzwm.agents.evolution import behavior_descriptor, zero_sun_plant_fraction
 from pvzwm.agents.goal_iql import (
     GoalConditionedAutoregressiveActor,
     GoalValueNetwork,
     load_goal_episodes,
 )
-from pvzwm.agents.evolution import behavior_descriptor, zero_sun_plant_fraction
-from pvzwm.agents.latent_goals import (
-    cluster_key,
-    frontier_goals_from_checkpoint,
-    normalize_latents,
-)
 from pvzwm.agents.goal_selector import (
     FrontierGoal,
     fit_competence_threshold,
     select_frontier_goal,
+)
+from pvzwm.agents.latent_goals import (
+    cluster_key,
+    frontier_goals_from_checkpoint,
+    normalize_latents,
 )
 from pvzwm.data.store import ReplayStore, Transition
 from pvzwm.device import select_device

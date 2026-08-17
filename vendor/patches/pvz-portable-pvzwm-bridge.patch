@@ -1,44 +1,87 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index ba6f93c..5b40793 100644
+index fe1e67a..a887170 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -46,6 +46,10 @@ file(GLOB SOURCES CONFIGURE_DEPENDS
+@@ -48,6 +48,23 @@ file(GLOB SOURCES CONFIGURE_DEPENDS
  	src/Lawn/System/*.cpp
  )
  
 +set(PVZWM_BRIDGE_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/PVZWMBridge.cpp)
 +list(REMOVE_ITEM SOURCES ${PVZWM_BRIDGE_SOURCE})
 +option(PVZWM_BUILD_BRIDGE "Build the process-local PvZWM RL bridge" OFF)
++option(
++	PVZWM_BUILD_METAL_BRIDGE
++	"Build the macOS Metal differential-test bridge"
++	OFF
++)
++option(PVZWM_BUILD_TESTS "Build PvZWM engine regression tests" OFF)
++set(PVZ_MACOS_METAL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/src/SexyAppFramework/graphics/MetalInterface.cpp)
++list(REMOVE_ITEM SOURCES ${PVZ_MACOS_METAL_SOURCE})
++if(APPLE AND NOT IOS)
++	option(PVZ_MACOS_METAL "Use SDL's native Metal renderer for the playable macOS target" ON)
++else()
++	set(PVZ_MACOS_METAL OFF)
++endif()
 +
  # these files are included and must not be built in the project
  list(REMOVE_ITEM SOURCES
  	${CMAKE_CURRENT_SOURCE_DIR}/src/Sexy.TodLib/TodDrawTriangle.cpp
-@@ -255,6 +259,42 @@ else()
+@@ -187,12 +204,20 @@ if(BUILD_STATIC AND TARGET SDL2::SDL2-static)
+ endif()
+ 
+ # Android requires a shared library loaded by SDLActivity; other platforms use an executable.
++set(PVZ_PORTABLE_SOURCES ${SOURCES})
++if(PVZ_MACOS_METAL)
++	list(REMOVE_ITEM PVZ_PORTABLE_SOURCES
++		${CMAKE_CURRENT_SOURCE_DIR}/src/SexyAppFramework/graphics/GLInterface.cpp
++	)
++	list(APPEND PVZ_PORTABLE_SOURCES ${PVZ_MACOS_METAL_SOURCE})
++endif()
++
+ if(ANDROID)
+-	add_library(pvz-portable SHARED ${SOURCES})
++	add_library(pvz-portable SHARED ${PVZ_PORTABLE_SOURCES})
+ elseif(IOS)
+-	add_executable(pvz-portable MACOSX_BUNDLE ${SOURCES})
++	add_executable(pvz-portable MACOSX_BUNDLE ${PVZ_PORTABLE_SOURCES})
+ else()
+-	add_executable(pvz-portable ${SOURCES})
++	add_executable(pvz-portable ${PVZ_PORTABLE_SOURCES})
+ endif()
+ 
+ target_include_directories(pvz-portable PRIVATE
+@@ -206,6 +231,7 @@ target_include_directories(pvz-portable PRIVATE
+ target_compile_definitions(pvz-portable PRIVATE
+ 	$<$<BOOL:${PVZ_DEBUG}>:PVZ_DEBUG>
+ 	$<$<BOOL:${DO_FIX_BUGS}>:DO_FIX_BUGS>
++	$<$<BOOL:${PVZ_MACOS_METAL}>:PVZ_MACOS_METAL>
+ )
+ target_compile_features(pvz-portable PRIVATE cxx_std_20)
+ set_target_properties(pvz-portable PROPERTIES CXX_EXTENSIONS OFF)
+@@ -259,6 +285,129 @@ else()
  	)
  endif()
  
-+if(PVZWM_BUILD_BRIDGE AND NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN AND NOT NINTENDO_SWITCH AND NOT NINTENDO_3DS)
-+	set(PVZWM_BRIDGE_SOURCES ${SOURCES})
-+	list(REMOVE_ITEM PVZWM_BRIDGE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
-+	add_executable(pvzwm-bridge ${PVZWM_BRIDGE_SOURCES} ${PVZWM_BRIDGE_SOURCE})
-+	target_include_directories(pvzwm-bridge PRIVATE
++function(_pvzwm_configure_bridge target)
++	target_include_directories(${target} PRIVATE
 +		${PLAT_INCLUDES}
++		${PROJECT_BINARY_DIR}
 +		${PROJECT_SOURCE_DIR}/src
 +		${PROJECT_SOURCE_DIR}/src/SexyAppFramework
 +		${PROJECT_SOURCE_DIR}/src/SexyAppFramework/sound/SDL-Mixer-X/include
 +		${SDL2_INCLUDE_DIRS}
 +	)
-+	target_compile_definitions(pvzwm-bridge PRIVATE
++	target_compile_definitions(${target} PRIVATE
 +		$<$<BOOL:${PVZ_DEBUG}>:PVZ_DEBUG>
 +		$<$<BOOL:${DO_FIX_BUGS}>:DO_FIX_BUGS>
 +		IMG_DOWNSCALE=${DOWNSCALE_COUNT}
 +	)
 +	if(LOW_MEMORY)
-+		target_compile_definitions(pvzwm-bridge PRIVATE LOW_MEMORY)
++		target_compile_definitions(${target} PRIVATE LOW_MEMORY)
 +	endif()
-+	target_compile_features(pvzwm-bridge PRIVATE cxx_std_20)
-+	set_target_properties(pvzwm-bridge PROPERTIES CXX_EXTENSIONS OFF)
-+	target_link_libraries(pvzwm-bridge PRIVATE
++	target_compile_features(${target} PRIVATE cxx_std_20)
++	set_target_properties(${target} PROPERTIES CXX_EXTENSIONS OFF)
++	target_link_libraries(${target} PRIVATE
 +		SDL2_mixer_ext_Static
 +		${OPENMPT_LIB}
 +		${MPG123_LIB}
@@ -51,17 +94,903 @@ index ba6f93c..5b40793 100644
 +		${SDL2_LINK_TARGET}
 +		Threads::Threads
 +	)
++endfunction()
++
++if(PVZWM_BUILD_BRIDGE AND NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN AND NOT NINTENDO_SWITCH AND NOT NINTENDO_3DS)
++	set(PVZWM_BRIDGE_SOURCES ${SOURCES})
++	list(REMOVE_ITEM PVZWM_BRIDGE_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
++	add_executable(pvzwm-bridge ${PVZWM_BRIDGE_SOURCES} ${PVZWM_BRIDGE_SOURCE})
++	_pvzwm_configure_bridge(pvzwm-bridge)
++endif()
++
++if(PVZWM_BUILD_METAL_BRIDGE AND APPLE AND NOT IOS AND PVZ_MACOS_METAL)
++	set(PVZWM_METAL_BRIDGE_SOURCES ${PVZ_PORTABLE_SOURCES})
++	list(REMOVE_ITEM
++		PVZWM_METAL_BRIDGE_SOURCES
++		${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
++	)
++	add_executable(
++		pvzwm-metal-bridge
++		${PVZWM_METAL_BRIDGE_SOURCES}
++		${PVZWM_BRIDGE_SOURCE}
++	)
++	_pvzwm_configure_bridge(pvzwm-metal-bridge)
++	target_compile_definitions(
++		pvzwm-metal-bridge
++		PRIVATE
++			PVZ_MACOS_METAL
++			PVZWM_DIFFERENTIAL_BRIDGE
++	)
++	target_link_libraries(
++		pvzwm-metal-bridge
++		PRIVATE
++			"-framework Metal"
++			"-framework QuartzCore"
++	)
++endif()
++
++if(PVZWM_BUILD_TESTS AND NOT ANDROID AND NOT IOS AND NOT EMSCRIPTEN AND NOT NINTENDO_SWITCH AND NOT NINTENDO_3DS)
++	set(PVZWM_STRING_FORMAT_TEST_SOURCES ${PVZ_PORTABLE_SOURCES})
++	list(REMOVE_ITEM
++		PVZWM_STRING_FORMAT_TEST_SOURCES
++		${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp
++	)
++	add_executable(
++		pvzwm-string-format-test
++		EXCLUDE_FROM_ALL
++		${PVZWM_STRING_FORMAT_TEST_SOURCES}
++		${CMAKE_CURRENT_SOURCE_DIR}/tests/TodStringFileTest.cpp
++	)
++	_pvzwm_configure_bridge(pvzwm-string-format-test)
++	enable_testing()
++	add_test(NAME pvzwm-string-format COMMAND pvzwm-string-format-test)
++	add_executable(
++		pvzwm-openmpt-tempo-test
++		EXCLUDE_FROM_ALL
++		${CMAKE_CURRENT_SOURCE_DIR}/tests/OpenMptTempoTest.cpp
++	)
++	target_include_directories(
++		pvzwm-openmpt-tempo-test
++		PRIVATE
++			${PROJECT_SOURCE_DIR}/src
++			${PROJECT_SOURCE_DIR}/src/SexyAppFramework/sound/SDL-Mixer-X/include
++			${SDL2_INCLUDE_DIRS}
++	)
++	target_compile_features(pvzwm-openmpt-tempo-test PRIVATE cxx_std_20)
++	set_target_properties(pvzwm-openmpt-tempo-test PROPERTIES CXX_EXTENSIONS OFF)
++	target_link_libraries(
++		pvzwm-openmpt-tempo-test
++		PRIVATE
++			SDL2_mixer_ext_Static
++			${OPENMPT_LIB}
++			${MPG123_LIB}
++			${VORBIS_LIB}
++			${OGG_LIB}
++			${SDL2_LINK_TARGET}
++			Threads::Threads
++	)
++	add_test(NAME pvzwm-openmpt-tempo COMMAND pvzwm-openmpt-tempo-test)
++	if(APPLE AND NOT IOS AND PVZ_MACOS_METAL)
++		target_compile_definitions(
++			pvzwm-string-format-test
++			PRIVATE
++				PVZ_MACOS_METAL
++		)
++		target_link_libraries(
++			pvzwm-string-format-test
++			PRIVATE
++				"-framework Metal"
++				"-framework QuartzCore"
++		)
++	endif()
 +endif()
 +
  if (WIN32)
  	if(MSVC)
  		target_compile_options(pvz-portable PRIVATE /utf-8)
+@@ -352,4 +501,9 @@ elseif (IOS)
+ 		set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/ios/Assets.xcassets"
+ 			PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+ 	endif()
++elseif(APPLE AND PVZ_MACOS_METAL)
++	target_link_libraries(pvz-portable PRIVATE
++		"-framework Metal"
++		"-framework QuartzCore"
++	)
+ endif()
+diff --git a/README.md b/README.md
+index 26c02b5..00052f6 100644
+--- a/README.md
++++ b/README.md
+@@ -318,6 +318,11 @@ The game can record a gameplay session into a `.dmo` demo file and replay it det
+ - `-play [<path>]` / `-play=[<path>]` — play back the first matching `pvzp-*.dmo` recording in descending timestamp/name order, or an explicit `<path>` if given.
+ - `-playnum <N>` / `-playnum=<N>` — play back the N-th recording in descending timestamp/name order; `1` selects the first.
+ - `-recnum <N>` / `-recnum=<N>` — record and keep the first `N` files matching the automatic timestamp pattern in descending timestamp/name order; other `pvzp-*.dmo` files are left untouched.
++- `-play-to-end` — fast-forward demo playback to completion for deterministic regression verification; the replay window uses a distinct title so a tiling window manager can place it independently.
++- `-play-to <update>` / `-play-to=<update>` — fast-forward through the requested update, write the verification report if configured, and exit; useful for checking a marked trajectory prefix without replaying an idle tail.
++- `-demo-blackout` — skip intermediate presentation while fast-forwarding; after the minimal title-screen draws required to start resource loading, the window remains black while the Metal-backed simulation runs.
++- `-demo-hidden` — keep the replay window out of the desktop layout; intended for automated verification, and composable with `-demo-blackout`.
++- `-demo-report <path>` / `-demo-report=<path>` — write a machine-readable completion, length-mismatch, or divergence report for demo verification.
+ 
+ This feature is primarily designed for debugging and regression testing.
+ 
+diff --git a/src/Lawn/Board.cpp b/src/Lawn/Board.cpp
+index b26de4c..a921887 100644
+--- a/src/Lawn/Board.cpp
++++ b/src/Lawn/Board.cpp
+@@ -190,6 +190,7 @@ Board::Board(LawnApp* theApp)
+ 	mMenuButton = new GameButton(0);
+ 	mMenuButton->mDrawStoneButton = true;
+ 	mStoreButton = nullptr;
++	mTeacherSpeedButton = nullptr;
+ 	mIgnoreMouseUp = false;
+ 
+ 	if (mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN || mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM)
+@@ -228,6 +229,16 @@ Board::Board(LawnApp* theApp)
+ 		mStoreButton->mBtnNoDraw = true;
+ 		mStoreButton->SetLabel("[GET_FULL_VERSION_BUTTON]");
+ 	}
++
++	if (mApp->IsTeacherSession())
++	{
++		mTeacherSpeedButton = new GameButton(2);
++		mTeacherSpeedButton->mDrawStoneButton = true;
++		mTeacherSpeedButton->mParentWidget = this;
++		mTeacherSpeedButton->mBtnNoDraw = mApp->mGameScene != GameScenes::SCENE_PLAYING;
++		mTeacherSpeedButton->SetLabel(mApp->IsTeacherDoubleSpeed() ? "SPEED: 2X" : "SPEED: 1X");
++		mTeacherSpeedButton->Resize(684, 38, 110, 36);
++	}
+ }
+ 
+ Board::~Board()
+@@ -244,6 +255,10 @@ Board::~Board()
+ 	{
+ 		delete mStoreButton;
+ 	}
++	if (mTeacherSpeedButton)
++	{
++		delete mTeacherSpeedButton;
++	}
+ 	mZombies.DataArrayDispose();
+ 	mPlants.DataArrayDispose();
+ 	mProjectiles.DataArrayDispose();
+@@ -1342,6 +1357,11 @@ Rect Board::GetShovelButtonRect()
+ 	return aRect;
+ }
+ 
++bool Board::ShouldShowTeacherSpeedButton() const
++{
++	return mTeacherSpeedButton && mApp->mGameScene == GameScenes::SCENE_PLAYING;
++}
++
+ void Board::GetZenButtonRect(GameObjectType theObjectType, Rect& theRect)
+ {
+ 	// 此函数与内测版的差异在于，内测版在此函数中通过下列语句先取得了铲子按钮矩形：
+@@ -4233,7 +4253,12 @@ bool Board::MouseHitTest(int x, int y, HitResult* theHitResult)
+ 		return false;
+ 	}
+ 
+-	if (mMenuButton->IsMouseOver() && CanInteractWithBoardButtons())
++	if (ShouldShowTeacherSpeedButton() && mTeacherSpeedButton->IsMouseOver() && CanInteractWithBoardButtons())
++	{
++		theHitResult->mObjectType = GameObjectType::OBJECT_TYPE_MENU_BUTTON;
++		return true;
++	}
++	else if (mMenuButton->IsMouseOver() && CanInteractWithBoardButtons())
+ 	{
+ 		theHitResult->mObjectType = GameObjectType::OBJECT_TYPE_MENU_BUTTON;
+ 		return true;
+@@ -4491,7 +4516,11 @@ void Board::MouseDown(int x, int y, int theClickCount)
+ 	if (mChallenge->MouseDown(x, y, theClickCount, &aHitResult))
+ 		return;
+ 
+-	if (mMenuButton->IsMouseOver() && CanInteractWithBoardButtons() && theClickCount > 0)
++	if (ShouldShowTeacherSpeedButton() && mTeacherSpeedButton->IsMouseOver() && CanInteractWithBoardButtons() && theClickCount > 0)
++	{
++		mApp->PlaySample(Sexy::SOUND_TAP);
++	}
++	else if (mMenuButton->IsMouseOver() && CanInteractWithBoardButtons() && theClickCount > 0)
+ 	{
+ 		mApp->PlaySample(Sexy::SOUND_GRAVEBUTTON);
+ 	}
+@@ -4710,7 +4739,16 @@ void Board::MouseUp(int x, int y, int theClickCount)
+ 
+ 	if (CanInteractWithBoardButtons() && theClickCount > 0)
+ 	{
+-		if (mMenuButton->IsMouseOver() && !mApp->GetDialog(Dialogs::DIALOG_GAME_OVER) && !mApp->GetDialog(Dialogs::DIALOG_LEVEL_COMPLETE))
++		if (ShouldShowTeacherSpeedButton() && mTeacherSpeedButton->IsMouseOver())
++		{
++			mTeacherSpeedButton->mIsOver = false;
++			mTeacherSpeedButton->mIsDown = false;
++			mApp->ToggleTeacherDoubleSpeed();
++			mTeacherSpeedButton->SetLabel(mApp->IsTeacherDoubleSpeed() ? "SPEED: 2X" : "SPEED: 1X");
++			UpdateCursor();
++			return;
++		}
++		else if (mMenuButton->IsMouseOver() && !mApp->GetDialog(Dialogs::DIALOG_GAME_OVER) && !mApp->GetDialog(Dialogs::DIALOG_LEVEL_COMPLETE))
+ 		{
+ 			mMenuButton->mIsOver = false;
+ 			mMenuButton->mIsDown = false;
+@@ -5812,6 +5850,8 @@ void Board::Update()
+ 
+ 	Widget::Update();
+ 	MarkDirty();
++	if (mTeacherSpeedButton)
++		mTeacherSpeedButton->mBtnNoDraw = !ShouldShowTeacherSpeedButton();
+ 
+ 	mBoardUpdateCounter++;
+ 	mCutScene->Update();
+@@ -5839,6 +5879,11 @@ void Board::Update()
+ 		mMenuButton->mDisabled = aDisabled;
+ 	}
+ 	mMenuButton->Update();
++	if (mTeacherSpeedButton)
++	{
++		mTeacherSpeedButton->mDisabled = aDisabled;
++		mTeacherSpeedButton->Update();
++	}
+ 	if (mStoreButton)
+ 	{
+ 		mStoreButton->mDisabled = aDisabled;
+@@ -7306,6 +7351,10 @@ void Board::DrawTopRightUI(Graphics* g)
+ 	}
+ 	mMenuButton->Draw(g);
+ 	g->SetColorizeImages(false);
++	if (ShouldShowTeacherSpeedButton())
++	{
++		mTeacherSpeedButton->Draw(g);
++	}
+ 
+ 	if (mStoreButton && mApp->mGameMode != GameMode::GAMEMODE_CHALLENGE_LAST_STAND)
+ 	{
+diff --git a/src/Lawn/Board.h b/src/Lawn/Board.h
+index 1d4fcec..f67476e 100644
+--- a/src/Lawn/Board.h
++++ b/src/Lawn/Board.h
+@@ -139,6 +139,7 @@ public:
+ 	SeedBank*						mSeedBank;
+ 	GameButton*						mMenuButton;
+ 	GameButton*						mStoreButton;
++	GameButton*						mTeacherSpeedButton;
+ 	bool							mIgnoreMouseUp;
+ 	ToolTipWidget*					mToolTip;
+ 	//_Font*							mDebugFont;
+@@ -444,6 +445,7 @@ public:
+ 	/*inline*/ void					PutZombieInWave(ZombieType theZombieType, int theWaveNumber, ZombiePicker* theZombiePicker);
+ 	/*inline*/ void					PutInMissingZombies(int theWaveNumber, ZombiePicker* theZombiePicker);
+ 	Rect							GetShovelButtonRect();
++	bool							ShouldShowTeacherSpeedButton() const;
+ 	void							GetZenButtonRect(GameObjectType theObjectType, Rect& theRect);
+ 	Plant*							NewPlant(int theGridX, int theGridY, SeedType theSeedType, SeedType theImitaterType = SeedType::SEED_NONE);
+ 	void							DoPlantingEffects(int theGridX, int theGridY, Plant* thePlant);
+diff --git a/src/Lawn/System/Music.cpp b/src/Lawn/System/Music.cpp
+index b482858..54d19e6 100644
+--- a/src/Lawn/System/Music.cpp
++++ b/src/Lawn/System/Music.cpp
+@@ -20,6 +20,7 @@
+  */
+ 
+ #include "Music.h"
++#include "MusicTempo.h"
+ #include "../Board.h"
+ #include "PlayerInfo.h"
+ #include "../../LawnApp.h"
+@@ -267,7 +268,6 @@ void Music::PlayMusic(MusicTune theMusicTune, int theOffset, int theDrumsOffset)
+ 	mCurMusicFileMain = MusicFile::MUSIC_FILE_NONE;
+ 	mCurMusicFileDrums = MusicFile::MUSIC_FILE_NONE;
+ 	mCurMusicFileHihats = MusicFile::MUSIC_FILE_NONE;
+-	bool aRestartingSong = theOffset != -1;
+ 
+ 	switch (theMusicTune)
+ 	{
+@@ -372,13 +372,14 @@ void Music::PlayMusic(MusicTune theMusicTune, int theOffset, int theDrumsOffset)
+ 		break;
+ 	}
+ 
+-	if (aRestartingSong)
++	if (mCurMusicFileMain != MusicFile::MUSIC_FILE_NONE &&
++		mCurMusicTune != MusicTune::MUSIC_TUNE_CREDITS_ZOMBIES_ON_YOUR_LAWN)
+ 	{
+-		// TODO: Restore BPM/speed for restarting songs when tempo API is implemented
+-	}
+-	else
+-	{
+-		// TODO: Read base BPM/speed from newly started song when tempo API is implemented
++		// Pattern commands retain the tune's native BPM and speed. Reset only
++		// the persistent correction factor when a tune starts or resumes.
++		Mix_SetMusicTempo(GetMusicHandle(mCurMusicFileMain), 1.0);
++		if (mCurMusicFileDrums != MusicFile::MUSIC_FILE_NONE)
++			Mix_SetMusicTempo(GetMusicHandle(mCurMusicFileDrums), 1.0);
+ 	}
+ }
+ 
+@@ -395,17 +396,9 @@ void Music::MusicResyncChannel(MusicFile theMusicFileToMatch, MusicFile theMusic
+ 	int aDiff = (aPosToSync >> 16) - (aPosToMatch >> 16);
+ 	if (abs(aDiff) <= 128)
+ 	{
+-		int aBPM = mBaseBPM;
+-		if (aDiff > 2)
+-			aBPM -= 2;
+-		else if (aDiff > 0)
+-			aBPM -= 1;
+-		else if (aDiff < -2)
+-			aBPM += 2;
+-		else if (aDiff < 0)
+-			aBPM -= 1;
+-
+-		// TODO: Apply BPM adjustment when tempo API is implemented
++		Mix_SetMusicTempo(
++			GetMusicHandle(theMusicFileToSync),
++			MusicTempoFactorForRowDifference(aDiff, mBaseBPM));
+ 	}
+ }
+ 
+@@ -625,37 +618,42 @@ void Music::MakeSureMusicIsPlaying(MusicTune theMusicTune)
+ 	}
+ }
+ 
+-void Music::StartGameMusic()
++MusicTune Music::GetGameMusicTune() const
+ {
+ 	TOD_ASSERT(mApp->mBoard);
+ 
+ 	if (mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_ZEN_GARDEN || mApp->mGameMode == GameMode::GAMEMODE_TREE_OF_WISDOM)
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_ZEN_GARDEN);
+-	else if (mApp->IsFinalBossLevel())
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_FINAL_BOSS_BRAINIAC_MANIAC);
+-	else if (mApp->IsWallnutBowlingLevel() || mApp->IsWhackAZombieLevel() || mApp->IsLittleTroubleLevel() || mApp->IsBungeeBlitzLevel() ||
++		return MusicTune::MUSIC_TUNE_ZEN_GARDEN;
++	if (mApp->IsFinalBossLevel())
++		return MusicTune::MUSIC_TUNE_FINAL_BOSS_BRAINIAC_MANIAC;
++	if (mApp->IsWallnutBowlingLevel() || mApp->IsWhackAZombieLevel() || mApp->IsLittleTroubleLevel() || mApp->IsBungeeBlitzLevel() ||
+ 		mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_SPEED)
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_MINIGAME_LOONBOON);
+-	else if ((mApp->IsAdventureMode() && (mApp->mPlayerInfo->GetLevel() == 10 || mApp->mPlayerInfo->GetLevel() == 20 || mApp->mPlayerInfo->GetLevel() == 30)) ||
++		return MusicTune::MUSIC_TUNE_MINIGAME_LOONBOON;
++	if ((mApp->IsAdventureMode() && (mApp->mPlayerInfo->GetLevel() == 10 || mApp->mPlayerInfo->GetLevel() == 20 || mApp->mPlayerInfo->GetLevel() == 30)) ||
+ 		mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_COLUMN)
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_CONVEYER);
+-	else if (mApp->IsStormyNightLevel())
++		return MusicTune::MUSIC_TUNE_CONVEYER;
++	if (mApp->IsStormyNightLevel())
++		return MusicTune::MUSIC_TUNE_NONE;
++	if (mApp->IsScaryPotterLevel() || mApp->IsIZombieLevel())
++		return MusicTune::MUSIC_TUNE_PUZZLE_CEREBRAWL;
++	if (mApp->mBoard->StageIsNight())
++		return mApp->mBoard->StageHasPool() ?
++			MusicTune::MUSIC_TUNE_FOG_RIGORMORMIST :
++			MusicTune::MUSIC_TUNE_NIGHT_MOONGRAINS;
++	if (mApp->mBoard->StageHas6Rows())
++		return MusicTune::MUSIC_TUNE_POOL_WATERYGRAVES;
++	if (mApp->mBoard->StageHasRoof())
++		return MusicTune::MUSIC_TUNE_ROOF_GRAZETHEROOF;
++	return MusicTune::MUSIC_TUNE_DAY_GRASSWALK;
++}
++
++void Music::StartGameMusic()
++{
++	const MusicTune aMusicTune = GetGameMusicTune();
++	if (aMusicTune == MusicTune::MUSIC_TUNE_NONE)
+ 		StopAllMusic();
+-	else if (mApp->IsScaryPotterLevel() || mApp->IsIZombieLevel())
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_PUZZLE_CEREBRAWL);
+-	else if (mApp->mBoard->StageIsNight())
+-	{
+-		if (mApp->mBoard->StageHasPool())
+-			MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_FOG_RIGORMORMIST);
+-		else
+-			MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_NIGHT_MOONGRAINS);
+-	}
+-	else if (mApp->mBoard->StageHas6Rows())
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_POOL_WATERYGRAVES);
+-	else if (mApp->mBoard->StageHasRoof())
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_ROOF_GRAZETHEROOF);
+ 	else
+-		MakeSureMusicIsPlaying(MusicTune::MUSIC_TUNE_DAY_GRASSWALK);
++		MakeSureMusicIsPlaying(aMusicTune);
+ }
+ 
+ void Music::GameMusicPause(bool thePause)
+diff --git a/src/Lawn/System/Music.h b/src/Lawn/System/Music.h
+index a387189..9ad6803 100644
+--- a/src/Lawn/System/Music.h
++++ b/src/Lawn/System/Music.h
+@@ -121,6 +121,7 @@ public:
+ 	void						StopAllMusic();
+ 	/*inline*/ void				PlayMusic(MusicTune theMusicTune, int theOffset = -1, int theDrumsOffset = -1);
+ 	/*inline*/ Mix_Music*		GetMusicHandle(MusicFile theMusicFile);
++	MusicTune					GetGameMusicTune() const;
+ 	void						StartGameMusic();
+ 	/*inline*/ void				LoadSong(MusicFile theMusicFile, std::string_view theFileName);
+ 	void						MusicResync();
+diff --git a/src/Lawn/System/MusicTempo.h b/src/Lawn/System/MusicTempo.h
+new file mode 100644
+index 0000000..ef24395
+--- /dev/null
++++ b/src/Lawn/System/MusicTempo.h
+@@ -0,0 +1,27 @@
++/*
++ * SPDX-License-Identifier: LGPL-3.0-or-later
++ */
++
++#ifndef __MUSIC_TEMPO_H__
++#define __MUSIC_TEMPO_H__
++
++inline double MusicTempoFactorForRowDifference(
++	int theRowDifference,
++	float theBaseBPM)
++{
++	if (theBaseBPM <= 0.0f)
++		return 1.0;
++
++	int aBPM = static_cast<int>(theBaseBPM);
++	if (theRowDifference > 2)
++		aBPM -= 2;
++	else if (theRowDifference > 0)
++		aBPM -= 1;
++	else if (theRowDifference < -2)
++		aBPM += 2;
++	else if (theRowDifference < 0)
++		aBPM += 1;
++	return static_cast<double>(aBPM) / theBaseBPM;
++}
++
++#endif
+diff --git a/src/Lawn/System/SaveGame.cpp b/src/Lawn/System/SaveGame.cpp
+index f93eb68..e5c1fea 100644
+--- a/src/Lawn/System/SaveGame.cpp
++++ b/src/Lawn/System/SaveGame.cpp
+@@ -1550,7 +1550,10 @@ enum BoardBaseFieldId : uint32_t
+ 	BOARD_FIELD_COINS_COLLECTED,
+ 	BOARD_FIELD_DIAMONDS_COLLECTED,
+ 	BOARD_FIELD_POTTED_PLANTS_COLLECTED,
+-	BOARD_FIELD_CHOCOLATE_COLLECTED
++	BOARD_FIELD_CHOCOLATE_COLLECTED,
++	BOARD_FIELD_GLOBAL_RNG_STATE,
++	BOARD_FIELD_APP_RANDOM_SEED,
++	BOARD_FIELD_RANDOM_SEED
+ };
+ 
+ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoard)
+@@ -1676,6 +1679,14 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
+ 			case BOARD_FIELD_DIAMONDS_COLLECTED: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mDiamondsCollected); }); break;
+ 			case BOARD_FIELD_POTTED_PLANTS_COLLECTED: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mPottedPlantsCollected); }); break;
+ 			case BOARD_FIELD_CHOCOLATE_COLLECTED: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mChocolateCollected); }); break;
++			case BOARD_FIELD_GLOBAL_RNG_STATE:
++				if (!SetRandState(std::string_view(
++						reinterpret_cast<const char*>(aFieldData),
++						aFieldSize)))
++					theContext.mFailed = true;
++				break;
++			case BOARD_FIELD_APP_RANDOM_SEED: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ c.SyncInt32(theBoard->mApp->mAppRandSeed); }); break;
++			case BOARD_FIELD_RANDOM_SEED: ApplyFieldWithSync(aFieldData, aFieldSize, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mApp->mRandSeed); }); break;
+ 			default: break;
+ 			}
+ 		}
+@@ -1786,6 +1797,10 @@ static void SyncBoardBasePortable(PortableSaveContext& theContext, Board* theBoa
+ 		AppendFieldWithSync(aBlob, BOARD_FIELD_DIAMONDS_COLLECTED, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mDiamondsCollected); });
+ 		AppendFieldWithSync(aBlob, BOARD_FIELD_POTTED_PLANTS_COLLECTED, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mPottedPlantsCollected); });
+ 		AppendFieldWithSync(aBlob, BOARD_FIELD_CHOCOLATE_COLLECTED, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mChocolateCollected); });
++		const std::string aRandState = GetRandState();
++		AppendFieldWithSync(aBlob, BOARD_FIELD_GLOBAL_RNG_STATE, [&](PortableSaveContext& c){ c.SyncBytes(aRandState.data(), static_cast<uint32_t>(aRandState.size())); });
++		AppendFieldWithSync(aBlob, BOARD_FIELD_APP_RANDOM_SEED, [&](PortableSaveContext& c){ c.SyncInt32(theBoard->mApp->mAppRandSeed); });
++		AppendFieldWithSync(aBlob, BOARD_FIELD_RANDOM_SEED, [&](PortableSaveContext& c){ c.SyncUInt32(theBoard->mApp->mRandSeed); });
+ 		WriteTLVBlob(theContext, aBlob);
+ 	}
+ }
+@@ -3104,7 +3119,7 @@ bool LawnLoadGame(Board* theBoard, const std::string& theFilePath)
+ 		return false;
+ 	}
+ 
+-	SaveFileHeader aHeader;
++	SaveFileHeader aHeader{};
+ 	aContext.SyncBytes(&aHeader, sizeof(aHeader));
+ 	if (aHeader.mMagicNumber != SAVE_FILE_MAGIC_NUMBER || aHeader.mBuildVersion != SAVE_FILE_VERSION || aHeader.mBuildDate != SAVE_FILE_DATE)
+ 	{
+diff --git a/src/Lawn/Widget/AlmanacDialog.cpp b/src/Lawn/Widget/AlmanacDialog.cpp
+index acb6ae9..5f7ac8a 100644
+--- a/src/Lawn/Widget/AlmanacDialog.cpp
++++ b/src/Lawn/Widget/AlmanacDialog.cpp
+@@ -503,7 +503,6 @@ void AlmanacDialog::DrawZombies(Graphics* g)
+ 			}
+ 		}
+ 	}
+-	// todo @Patoke: fix stuff that have another formatter after them, ex: "{KEYWORD}Weakness:{STAT} fume-shroom{METAL} and magnet-shroom{KEYWORD}" (magnet-shroom will show with the {KEYWORD} colors)
+ 	// @Patoke: added extra check for the zamboni zombie
+ 	TodDrawStringWrapped(g, aDescription, Rect(484, mSelectedZombie == ZombieType::ZOMBIE_ZAMBONI ? 372 : 377, 258, 170), Sexy::FONT_BRIANNETOD12, Color(40, 50, 90), aAlign);
+ }
+diff --git a/src/Lawn/Widget/AwardScreen.cpp b/src/Lawn/Widget/AwardScreen.cpp
+index e96a6c6..93ec480 100644
+--- a/src/Lawn/Widget/AwardScreen.cpp
++++ b/src/Lawn/Widget/AwardScreen.cpp
+@@ -46,6 +46,8 @@ AwardScreen::AwardScreen(LawnApp* theApp, AwardType theAwardType, bool theShowin
+ 	mAchievementAnimTime = 0;
+ 	mAwardType = theAwardType;
+ 	mShowingAchievements = theShowingAchievements;
++	mCheckpointButton = nullptr;
++	mShowCheckpointButtonAfterAchievements = false;
+ 
+ 	mLoadedResourceNames.push_back("DelayLoad_AwardScreen");
+ 
+@@ -181,6 +183,23 @@ AwardScreen::AwardScreen(LawnApp* theApp, AwardType theAwardType, bool theShowin
+ 		mMenuButton->mDisabled = true;
+ 	}
+ 
++	if (mAwardType == AWARD_FORLEVEL && mApp->IsAdventureMode() && mApp->CanSaveTeacherCheckpoint())
++	{
++		mCheckpointButton = new GameButton(AwardScreen::AwardScreen_Checkpoint);
++		mCheckpointButton->SetLabel("SAVE CHECKPOINT");
++		mCheckpointButton->mButtonImage = Sexy::IMAGE_SEEDCHOOSER_BUTTON;
++		mCheckpointButton->mOverImage = nullptr;
++		mCheckpointButton->mDownImage = nullptr;
++		mCheckpointButton->mDisabledImage = Sexy::IMAGE_SEEDCHOOSER_BUTTON_DISABLED;
++		mCheckpointButton->mOverOverlayImage = Sexy::IMAGE_SEEDCHOOSER_BUTTON_GLOW;
++		mCheckpointButton->SetFont(Sexy::FONT_DWARVENTODCRAFT15);
++		mCheckpointButton->mColors[ButtonWidget::COLOR_LABEL] = Color(213, 159, 43);
++		mCheckpointButton->mColors[ButtonWidget::COLOR_LABEL_HILITE] = Color(213, 159, 43);
++		mCheckpointButton->Resize(128, 500, 156, 42);
++		mCheckpointButton->mParentWidget = this;
++		mCheckpointButton->mTextOffsetY = -1;
++	}
++
+ 	if (mAwardType == AWARD_CREDITS_ZOMBIENOTE)
+ 	{
+ 		mStartButton->SetLabel("[ROLL_CREDITS]");
+@@ -240,10 +259,17 @@ AwardScreen::AwardScreen(LawnApp* theApp, AwardType theAwardType, bool theShowin
+ 	if (mShowingAchievements) {
+ 		mShowStartButtonAfterAchievements = !mStartButton->mBtnNoDraw;
+ 		mShowMenuButtonAfterAchievements = !mMenuButton->mBtnNoDraw;
++		mShowCheckpointButtonAfterAchievements =
++			mCheckpointButton != nullptr && !mCheckpointButton->mBtnNoDraw;
+ 		mStartButton->mBtnNoDraw = true;
+ 		mStartButton->mDisabled = true;
+ 		mMenuButton->mBtnNoDraw = true;
+ 		mMenuButton->mDisabled = true;
++		if (mCheckpointButton)
++		{
++			mCheckpointButton->mBtnNoDraw = true;
++			mCheckpointButton->mDisabled = true;
++		}
+ 		mContinueButton->SetLabel("[CONTINUE_BUTTON]");
+ 	}
+ 
+@@ -261,6 +287,7 @@ AwardScreen::~AwardScreen()
+ {
+ 	if (mStartButton) delete mStartButton;
+ 	if (mContinueButton) delete mContinueButton; // @Patoke: add new button
++	if (mCheckpointButton) delete mCheckpointButton;
+ 	if (mMenuButton) delete mMenuButton;
+ }
+ 
+@@ -427,6 +454,7 @@ void AwardScreen::Draw(Graphics* g)
+ 	mStartButton->Draw(g);
+ 	mMenuButton->Draw(g);
+ 	mContinueButton->Draw(g); // @Patoke: add call
++	if (mCheckpointButton) mCheckpointButton->Draw(g);
+ 
+ 	int aFadeInAlpha = TodAnimateCurve(180, 0, mFadeInCounter, 255, 0, CURVE_LINEAR);
+ 	g->SetColor(IsPaperNote() ? Color(0, 0, 0, aFadeInAlpha) : Color(255, 255, 255, aFadeInAlpha));
+@@ -457,7 +485,10 @@ void AwardScreen::Update()
+ 	mStartButton->Update();
+ 	mMenuButton->Update();
+ 	mContinueButton->Update(); // @Patoke: add call
+-	mApp->SetCursor(mStartButton->IsMouseOver() || mMenuButton->IsMouseOver() || mContinueButton->IsMouseOver() ? CURSOR_HAND : CURSOR_POINTER);
++	if (mCheckpointButton) mCheckpointButton->Update();
++	mApp->SetCursor(
++		mStartButton->IsMouseOver() || mMenuButton->IsMouseOver() || mContinueButton->IsMouseOver() ||
++		(mCheckpointButton && mCheckpointButton->IsMouseOver()) ? CURSOR_HAND : CURSOR_POINTER);
+ 	MarkDirty();
+ 	if (mFadeInCounter > 0) mFadeInCounter--;
+ }
+@@ -586,12 +617,29 @@ void AwardScreen::StartButtonPressed()
+ 	}
+ }
+ 
++void AwardScreen::CheckpointButtonPressed()
++{
++	if (!mCheckpointButton || mCheckpointButton->mDisabled)
++		return;
++
++	if (mApp->SaveTeacherCheckpoint())
++	{
++		mCheckpointButton->SetLabel("CHECKPOINT SAVED");
++		mCheckpointButton->mDisabled = true;
++	}
++	else
++	{
++		mCheckpointButton->SetLabel("RETRY CHECKPOINT");
++	}
++}
++
+ // GOTY @Patoke: 0x4097A0
+ void AwardScreen::MouseDown(int x, int y, int theClickCount)
+ {
+ 	(void)x;(void)y;
+ 	if (theClickCount == 1) {
+-		if (mStartButton->IsMouseOver() || mMenuButton->IsMouseOver() || mContinueButton->IsMouseOver())
++		if (mStartButton->IsMouseOver() || mMenuButton->IsMouseOver() || mContinueButton->IsMouseOver() ||
++			(mCheckpointButton && mCheckpointButton->IsMouseOver()))
+ 			mApp->PlaySample(Sexy::SOUND_TAP);
+ 	}
+ }
+@@ -606,6 +654,8 @@ void AwardScreen::MouseUp(int x, int y, int theClickCount)
+ 			StartButtonPressed();
+ 		if (mContinueButton->IsMouseOver()) // @Patoke: add call
+ 			AchievementsContinuePressed();
++		if (mCheckpointButton && mCheckpointButton->IsMouseOver())
++			CheckpointButtonPressed();
+ 		if (mMenuButton->IsMouseOver())
+ 		{
+ 			mApp->KillAwardScreen();
+@@ -668,6 +718,11 @@ void AwardScreen::AchievementsContinuePressed() {
+ 		mContinueButton->mDisabled = true;
+ 		mContinueButton->mBtnNoDraw = true;
+ 		mShowingAchievements = false;
++		if (mCheckpointButton)
++		{
++			mCheckpointButton->mBtnNoDraw = !mShowCheckpointButtonAfterAchievements;
++			mCheckpointButton->mDisabled = !mShowCheckpointButtonAfterAchievements;
++		}
+ 		int level = mApp->mPlayerInfo->GetLevel();
+ 		if (mApp->IsAdventureMode() && level == 1 && mApp->HasFinishedAdventure()) {
+ 			mApp->KillAwardScreen();
+diff --git a/src/Lawn/Widget/AwardScreen.h b/src/Lawn/Widget/AwardScreen.h
+index 8bb4b94..0fd2951 100644
+--- a/src/Lawn/Widget/AwardScreen.h
++++ b/src/Lawn/Widget/AwardScreen.h
+@@ -45,7 +45,8 @@ private:
+ 	enum
+ 	{
+ 		AwardScreen_Start = 100,
+-		AwardScreen_Menu = 101
++		AwardScreen_Menu = 101,
++		AwardScreen_Checkpoint = 102
+ 	};
+ 
+ public:
+@@ -55,8 +56,10 @@ public:
+ 	int									mFadeInCounter;
+ 	AwardType							mAwardType;				//+GOTY @Patoke: 0xB8
+ 	GameButton*							mContinueButton;		//+GOTY @Patoke: 0xA8
++	GameButton*							mCheckpointButton;
+ 	bool								mShowStartButtonAfterAchievements;	//+GOTY @Patoke: 0xAC
+ 	bool								mShowMenuButtonAfterAchievements;	//+GOTY @Patoke: 0xAD
++	bool								mShowCheckpointButtonAfterAchievements;
+ 	int									mAchievementAnimTime;	//+GOTY @Patoke: 0xBC
+ 	bool								mShowingAchievements;	//+GOTY @Patoke: 0xD8
+ 	std::vector<AchievementScreenItem>	mAchievementItems;		//+GOTY @Patoke: 0xC0
+@@ -76,6 +79,7 @@ public:
+ 	void				RemovedFromManager(WidgetManager* theWidgetManager) override { Widget::RemovedFromManager(theWidgetManager); }
+ 	void				KeyDown(KeyCode theKey) override;
+ 	void				StartButtonPressed();
++	void				CheckpointButtonPressed();
+ 	void				MouseDown(int x, int y, int theClickCount) override;
+ 	void				MouseUp(int x, int y, int theClickCount) override;
+ 	// @Patoke: implement functions
+diff --git a/src/Lawn/Zombie.cpp b/src/Lawn/Zombie.cpp
+index 5422366..be08483 100644
+--- a/src/Lawn/Zombie.cpp
++++ b/src/Lawn/Zombie.cpp
+@@ -7107,6 +7107,15 @@ void Zombie::EatZombie(Zombie* theZombie)
+ 
+ bool Zombie::TrySpawnLevelAward()
+ {
++    // A second zombie can die later in the same board update after another
++    // zombie has already crossed the house edge. Do not let that death replace
++    // the terminal loss with a level award.
++    if (mApp->mBoardResult == BoardResult::BOARDRESULT_LOST ||
++        mApp->mGameScene == GameScenes::SCENE_ZOMBIES_WON)
++    {
++        return false;
++    }
++
+     if (!IsOnBoard() || mBoard->HasLevelAwardDropped() || mBoard->mLevelComplete || mDroppedLoot)
+     {
+         return false;
+diff --git a/src/LawnApp.cpp b/src/LawnApp.cpp
+index 114cb55..b93f999 100644
+--- a/src/LawnApp.cpp
++++ b/src/LawnApp.cpp
+@@ -20,6 +20,7 @@
+  */
+ 
+ //#include <corecrt.h>
++#include <fstream>
+ #include <time.h>
+ #include "LawnApp.h"
+ #include "Lawn/Board.h"
+@@ -148,6 +149,7 @@ LawnApp::LawnApp()
+ 	mTrialType = TrialType::TRIALTYPE_NONE;
+ 	mDebugTrialLocked = false;
+ 	mMuteSoundsForCutscene = false;
++	mTeacherCompletedLevel = 0;
+ 	mMusicVolume = 0.85;
+ 	mSfxVolume = 0.5525;
+ 	mAutoStartLoadingThread = false;
+@@ -1402,12 +1404,144 @@ void LawnApp::HandleCmdLineParam(std::string_view theParamName, std::string_view
+ 		mDebugKeysEnabled = true;
+ #endif
+ 	}
++	else if (theParamName == "-teacher-session-dir")
++	{
++		mTeacherSessionDir = std::string(theParamValue);
++	}
+ 	else
+ 	{
+ 		SexyApp::HandleCmdLineParam(theParamName, theParamValue);
+ 	}
+ }
+ 
++static bool IsPathWithin(const std::filesystem::path& thePath, const std::filesystem::path& theParent)
++{
++	auto aPathIt = thePath.begin();
++	for (auto aParentIt = theParent.begin(); aParentIt != theParent.end(); ++aParentIt, ++aPathIt)
++	{
++		if (aPathIt == thePath.end() || *aPathIt != *aParentIt)
++			return false;
++	}
++	return true;
++}
++
++bool LawnApp::IsTeacherSession() const
++{
++	return !mTeacherSessionDir.empty() && (mRecordingDemoBuffer || mPlayingDemoBuffer);
++}
++
++bool LawnApp::IsTeacherDoubleSpeed() const
++{
++	return mUpdateMultiplier == 2.0;
++}
++
++void LawnApp::ToggleTeacherDoubleSpeed()
++{
++	if (IsTeacherSession())
++		mUpdateMultiplier = IsTeacherDoubleSpeed() ? 1.0 : 2.0;
++}
++
++bool LawnApp::CanSaveTeacherCheckpoint() const
++{
++	return IsTeacherSession() &&
++		mTeacherCompletedLevel >= 1 && mTeacherCompletedLevel <= FINAL_LEVEL;
++}
++
++bool LawnApp::SaveTeacherCheckpoint()
++{
++	if (!CanSaveTeacherCheckpoint())
++		return false;
++
++	WriteCurrentUserConfig();
++	WriteToRegistry();
++
++	// Reproduce the synchronous save calls recorded by the teacher button, but
++	// never emit a second checkpoint while verifying a playback.
++	if (mPlayingDemoBuffer)
++		return true;
++
++	const int aWorld = (mTeacherCompletedLevel - 1) / LEVELS_PER_AREA + 1;
++	const int aStage = (mTeacherCompletedLevel - 1) % LEVELS_PER_AREA + 1;
++	const std::string aBoundary = StrFormat("after-%d-%d", aWorld, aStage);
++	const std::string aMarker = "pvzwm/checkpoint/" + aBoundary;
++	DemoAddMarker(aMarker);
++	WriteDemoBuffer();
++
++	std::error_code anError;
++	const std::filesystem::path aSaveDir =
++		std::filesystem::weakly_canonical(PathFromU8(GetAppDataFolder()), anError);
++	if (anError)
++		return false;
++	const std::filesystem::path aSessionDir =
++		std::filesystem::weakly_canonical(PathFromU8(mTeacherSessionDir), anError);
++	if (anError || aSaveDir == aSessionDir ||
++		IsPathWithin(aSessionDir, aSaveDir) || IsPathWithin(aSaveDir, aSessionDir))
++		return false;
++
++	const std::filesystem::path aCheckpointRoot = aSessionDir / "checkpoints";
++	std::filesystem::create_directories(aCheckpointRoot, anError);
++	if (anError)
++		return false;
++
++	const std::filesystem::path aDestination = aCheckpointRoot / PathFromU8(aBoundary);
++	const std::filesystem::path aTemporary = aCheckpointRoot / PathFromU8("." + aBoundary + ".tmp");
++	if (std::filesystem::exists(aDestination, anError) || std::filesystem::exists(aTemporary, anError) || anError)
++		return false;
++
++	std::filesystem::copy(
++		aSaveDir,
++		aTemporary,
++		std::filesystem::copy_options::recursive | std::filesystem::copy_options::copy_symlinks,
++		anError);
++	if (anError)
++	{
++		std::error_code aCleanupError;
++		std::filesystem::remove_all(aTemporary, aCleanupError);
++		return false;
++	}
++
++	std::ofstream aManifest(aTemporary / "pvzwm-checkpoint.json", std::ios::out | std::ios::trunc);
++	aManifest
++		<< "{\n"
++		<< "  \"schema_version\": 1,\n"
++		<< "  \"kind\": \"pvzwm-human-teacher-checkpoint\",\n"
++		<< "  \"completed_level\": " << mTeacherCompletedLevel << ",\n"
++		<< "  \"world\": " << aWorld << ",\n"
++		<< "  \"stage\": " << aStage << ",\n"
++		<< "  \"next_adventure_level\": " << mPlayerInfo->GetLevel() << ",\n"
++		<< "  \"demo_marker\": \"" << aMarker << "\",\n"
++		<< "  \"demo_update\": " << mUpdateCount << ",\n"
++		<< "  \"engine_version\": \"" << PVZP_VERSION << "\"\n"
++		<< "}\n";
++	aManifest.close();
++	if (!aManifest)
++	{
++		std::error_code aCleanupError;
++		std::filesystem::remove_all(aTemporary, aCleanupError);
++		return false;
++	}
++
++	std::filesystem::rename(aTemporary, aDestination, anError);
++	if (anError)
++	{
++		std::error_code aCleanupError;
++		std::filesystem::remove_all(aTemporary, aCleanupError);
++		return false;
++	}
++
++	std::ofstream anIndex(aSessionDir / "checkpoints.jsonl", std::ios::out | std::ios::app);
++	anIndex
++		<< "{\"schema_version\":1,\"completed_level\":" << mTeacherCompletedLevel
++		<< ",\"checkpoint\":\"checkpoints/" << aBoundary
++		<< "\",\"demo_marker\":\"" << aMarker
++		<< "\",\"demo_update\":" << mUpdateCount << "}\n";
++	anIndex.close();
++
++	TodTrace("Saved PVZWM teacher checkpoint after %d-%d to '%s'",
++		aWorld, aStage, PathToU8(aDestination).c_str());
++	return true;
++}
++
+ // GOTY @Patoke: 0x41E420
+ bool LawnApp::UpdatePlayerProfileForFinishingLevel()
+ {
+@@ -1522,6 +1656,7 @@ void LawnApp::CheckForGameEnd()
+ 	if (IsAdventureMode())
+ 	{
+ 		int aLevel = mBoard->mLevel;
++		mTeacherCompletedLevel = aLevel;
+ 		KillBoard();
+ 
+ 		if (IsFirstTimeAdventureMode() && aLevel < 50)
+diff --git a/src/LawnApp.h b/src/LawnApp.h
+index ef286c1..9c162aa 100644
+--- a/src/LawnApp.h
++++ b/src/LawnApp.h
+@@ -141,6 +141,8 @@ public:
+ 	TrialType						mTrialType;
+ 	bool							mDebugTrialLocked;
+ 	bool							mMuteSoundsForCutscene;
++	std::string						mTeacherSessionDir;
++	int								mTeacherCompletedLevel;
+ 
+ public:
+ 	LawnApp();
+@@ -160,6 +162,11 @@ public:
+ 	bool							OpenURL(const std::string& theURL, bool shutdownOnOpen) override;
+ 	bool							DebugKeyDown(int theKey) override;
+ 	void							HandleCmdLineParam(std::string_view theParamName, std::string_view theParamValue) override;
++	bool							IsTeacherSession() const;
++	bool							IsTeacherDoubleSpeed() const;
++	void							ToggleTeacherDoubleSpeed();
++	bool							CanSaveTeacherCheckpoint() const;
++	bool							SaveTeacherCheckpoint();
+ 	void							ConfirmQuit();
+ 	void							ConfirmCheckForUpdates() { ; }
+ 	void							CheckForUpdates() { ; }
 diff --git a/src/PVZWMBridge.cpp b/src/PVZWMBridge.cpp
 new file mode 100644
-index 0000000..1111111
+index 0000000..1de5e9e
 --- /dev/null
 +++ b/src/PVZWMBridge.cpp
-@@ -0,0 +1,814 @@
+@@ -0,0 +1,1581 @@
 +/*
 + * SPDX-License-Identifier: LGPL-3.0-or-later
 + *
@@ -75,12 +1004,17 @@ index 0000000..1111111
 +#include "Lawn/Coin.h"
 +#include "Lawn/Challenge.h"
 +#include "Lawn/Cutscene.h"
++#include "Lawn/GridItem.h"
++#include "Lawn/LawnCommon.h"
 +#include "Lawn/LawnMower.h"
 +#include "Lawn/Plant.h"
++#include "Lawn/Projectile.h"
 +#include "Lawn/SeedPacket.h"
 +#include "Lawn/System/Music.h"
 +#include "Lawn/System/PlayerInfo.h"
 +#include "Lawn/System/ProfileMgr.h"
++#include "Lawn/Widget/ContinueDialog.h"
++#include "Lawn/Widget/GameButton.h"
 +#include "Lawn/Widget/SeedChooserScreen.h"
 +#include "Lawn/Zombie.h"
 +#include "Sexy.TodLib/TodStringFile.h"
@@ -89,7 +1023,9 @@ index 0000000..1111111
 +#include "SexyAppFramework/graphics/Graphics.h"
 +#include "SexyAppFramework/graphics/GLImage.h"
 +#include "SexyAppFramework/graphics/GLInterface.h"
++#if !defined(PVZ_MACOS_METAL)
 +#include "SexyAppFramework/graphics/GLPlatform.h"
++#endif
 +#include "SexyAppFramework/widget/WidgetManager.h"
 +
 +#include <SDL.h>
@@ -122,6 +1058,53 @@ index 0000000..1111111
 +constexpr int kCollectAction = kBoardClickActionBegin + kCells;
 +constexpr int kActionCount = kCollectAction + 1;
 +
++std::string JsonEscape(std::string_view value)
++{
++    static constexpr char hex[] = "0123456789abcdef";
++    std::string escaped;
++    escaped.reserve(value.size());
++    for (unsigned char character : value)
++    {
++        switch (character)
++        {
++        case '"':
++            escaped += "\\\"";
++            break;
++        case '\\':
++            escaped += "\\\\";
++            break;
++        case '\b':
++            escaped += "\\b";
++            break;
++        case '\f':
++            escaped += "\\f";
++            break;
++        case '\n':
++            escaped += "\\n";
++            break;
++        case '\r':
++            escaped += "\\r";
++            break;
++        case '\t':
++            escaped += "\\t";
++            break;
++        default:
++            if (character < 0x20)
++            {
++                escaped += "\\u00";
++                escaped.push_back(hex[character >> 4]);
++                escaped.push_back(hex[character & 0x0f]);
++            }
++            else
++            {
++                escaped.push_back(static_cast<char>(character));
++            }
++            break;
++        }
++    }
++    return escaped;
++}
++
 +std::string Base64Encode(const std::vector<unsigned char>& bytes)
 +{
 +    static constexpr char alphabet[] =
@@ -149,6 +1132,47 @@ index 0000000..1111111
 +
 +    outputWidth = std::clamp(outputWidth, 1, BOARD_WIDTH);
 +    outputHeight = std::clamp(outputHeight, 1, BOARD_HEIGHT);
++    std::vector<unsigned char> rgba(
++        static_cast<std::size_t>(BOARD_WIDTH) * BOARD_HEIGHT * 4);
++
++#if defined(PVZ_MACOS_METAL)
++    SDL_Renderer* renderer = static_cast<SDL_Renderer*>(app->mContext);
++    if (renderer == nullptr)
++        return "";
++
++    static SDL_Texture* target = nullptr;
++    if (target == nullptr)
++    {
++        target = SDL_CreateTexture(
++            renderer,
++            SDL_PIXELFORMAT_RGBA32,
++            SDL_TEXTUREACCESS_TARGET,
++            BOARD_WIDTH,
++            BOARD_HEIGHT);
++        if (target == nullptr)
++            return "";
++    }
++
++    SDL_Texture* previousTarget = SDL_GetRenderTarget(renderer);
++    if (SDL_SetRenderTarget(renderer, target) != 0)
++        return "";
++    SDL_RenderSetClipRect(renderer, nullptr);
++    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
++    SDL_RenderClear(renderer);
++
++    Graphics graphics(app->mGLInterface->GetScreenImage());
++    app->mBoard->Draw(&graphics);
++    const int readResult = SDL_RenderReadPixels(
++        renderer,
++        nullptr,
++        SDL_PIXELFORMAT_RGBA32,
++        rgba.data(),
++        BOARD_WIDTH * 4);
++    SDL_SetRenderTarget(renderer, previousTarget);
++    app->mGLInterface->UpdateViewport();
++    if (readResult != 0)
++        return "";
++#else
 +    SDL_GL_MakeCurrent(
 +        static_cast<SDL_Window*>(app->mWindow),
 +        static_cast<SDL_GLContext>(app->mContext));
@@ -195,8 +1219,6 @@ index 0000000..1111111
 +    Graphics graphics(app->mGLInterface->GetScreenImage());
 +    app->mBoard->Draw(&graphics);
 +
-+    std::vector<unsigned char> rgba(
-+        static_cast<std::size_t>(BOARD_WIDTH) * BOARD_HEIGHT * 4);
 +    glReadPixels(
 +        0,
 +        0,
@@ -207,11 +1229,16 @@ index 0000000..1111111
 +        rgba.data());
 +    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 +    app->mGLInterface->UpdateViewport();
++#endif
 +
 +    std::vector<unsigned char> rgb(static_cast<std::size_t>(outputWidth) * outputHeight * 3);
 +    for (int y = 0; y < outputHeight; ++y)
 +    {
++#if defined(PVZ_MACOS_METAL)
++        const int sourceY = y * BOARD_HEIGHT / outputHeight;
++#else
 +        const int sourceY = BOARD_HEIGHT - 1 - y * BOARD_HEIGHT / outputHeight;
++#endif
 +        for (int x = 0; x < outputWidth; ++x)
 +        {
 +            const int sourceX = x * BOARD_WIDTH / outputWidth;
@@ -380,6 +1407,20 @@ index 0000000..1111111
 +    board->ProcessDeleteQueue();
 +}
 +
++void FinishSkippedCutsceneLawnMowers(Board* board)
++{
++    // ResetBoard skips the visual intro instead of advancing CutScene::Update.
++    // The real intro leaves every mower visible at x=-21; PlaceLawnItems alone
++    // leaves them hidden at their construction position (x=-160), too far left
++    // to intercept a zombie before CheckForBoardEdge declares a loss.
++    LawnMower* mower = nullptr;
++    while (board->IterateLawnMowers(mower))
++    {
++        mower->mVisible = true;
++        mower->mPosX = -21.0f;
++    }
++}
++
 +std::vector<int> LegalActions(Board* board)
 +{
 +    std::vector<int> legal{kWaitAction};
@@ -426,6 +1467,48 @@ index 0000000..1111111
 +    return legal;
 +}
 +
++bool LastStandStartAvailable(Board* board)
++{
++    return board->mApp->mGameMode == GameMode::GAMEMODE_CHALLENGE_LAST_STAND &&
++        board->mStoreButton != nullptr &&
++        !board->mStoreButton->mBtnNoDraw &&
++        !board->mStoreButton->mDisabled &&
++        board->CanInteractWithBoardButtons();
++}
++
++bool SurvivalRepickAvailable(Board* board)
++{
++    return board->mApp->IsSurvivalMode() &&
++        board->IsSurvivalStageWithRepick() &&
++        board->mLevelComplete;
++}
++
++bool ApplyInteraction(Board* board, std::string_view interaction)
++{
++    if (interaction != "last_stand_start" || !LastStandStartAvailable(board))
++        return false;
++
++    GameButton* button = board->mStoreButton;
++    const int x = button->mX + button->mWidth / 2;
++    const int y = button->mY + button->mHeight / 2;
++    WidgetManager* manager = board->mApp->mWidgetManager;
++    const int previousMouseX = manager->mLastMouseX;
++    const int previousMouseY = manager->mLastMouseY;
++    const Point parentPosition =
++        button->mParentWidget != nullptr
++            ? button->mParentWidget->GetAbsPos()
++            : Point();
++    manager->mLastMouseX = parentPosition.mX + x;
++    manager->mLastMouseY = parentPosition.mY + y;
++    button->Update();
++    board->MouseDown(x, y, 1);
++    board->MouseUp(x, y, 1);
++    manager->mLastMouseX = previousMouseX;
++    manager->mLastMouseY = previousMouseY;
++    button->Update();
++    return true;
++}
++
 +std::string ObservationJson(
 +    LawnApp* app,
 +    int action,
@@ -446,13 +1529,23 @@ index 0000000..1111111
 +
 +    std::ostringstream out;
 +    out << "{\"ok\":true"
-+        << ",\"protocol_version\":3"
++        << ",\"protocol_version\":4"
 +        << ",\"action_count\":" << kActionCount
 +        << ",\"logical_width\":" << BOARD_WIDTH
 +        << ",\"logical_height\":" << BOARD_HEIGHT
++        << ",\"game_mode\":" << static_cast<int>(app->mGameMode)
 +        << ",\"level\":" << board->mLevel
 +        << ",\"area\":" << ((board->mLevel - 1) / LEVELS_PER_AREA + 1)
 +        << ",\"stage\":" << ((board->mLevel - 1) % LEVELS_PER_AREA + 1)
++        << ",\"background\":" << static_cast<int>(board->mBackground)
++        << ",\"row_count\":" << (board->StageHas6Rows() ? 6 : 5)
++        << ",\"stage_is_night\":" << (board->StageIsNight() ? "true" : "false")
++        << ",\"stage_has_pool\":" << (board->StageHasPool() ? "true" : "false")
++        << ",\"stage_has_fog\":" << (board->StageHasFog() ? "true" : "false")
++        << ",\"stage_has_roof\":" << (board->StageHasRoof() ? "true" : "false")
++        << ",\"game_music_tune\":" << static_cast<int>(app->mMusic->GetGameMusicTune())
++        << ",\"has_conveyor\":" << (board->HasConveyorBeltSeedBank() ? "true" : "false")
++        << ",\"choose_seeds\":" << (board->ChooseSeedsOnCurrentLevel() ? "true" : "false")
 +        << ",\"scene\":" << static_cast<int>(app->mGameScene)
 +        << ",\"board_result\":" << static_cast<int>(app->mBoardResult)
 +        << ",\"done\":" << ((won || lost) ? "true" : "false")
@@ -460,6 +1553,9 @@ index 0000000..1111111
 +        << ",\"reward\":" << reward
 +        << ",\"last_action\":" << action
 +        << ",\"ticks\":" << ticks
++        << ",\"app_rand_seed\":" << app->mAppRandSeed
++        << ",\"rand_seed\":" << app->mRandSeed
++        << ",\"rand_state_index\":" << RandStateIndex()
 +        << ",\"sun\":" << board->mSunMoney
 +        << ",\"wave\":" << board->mCurrentWave
 +        << ",\"plants_count\":" << board->mPlants.mSize
@@ -470,11 +1566,32 @@ index 0000000..1111111
 +        << ",\"zombie_countdown\":" << board->mZombieCountDown
 +        << ",\"num_waves\":" << board->mNumWaves
 +        << ",\"total_spawned_waves\":" << board->mTotalSpawnedWaves
++        << ",\"challenge_state\":"
++        << static_cast<int>(board->mChallenge->mChallengeState)
++        << ",\"challenge_state_counter\":"
++        << board->mChallenge->mChallengeStateCounter
++        << ",\"survival_stage\":" << board->mChallenge->mSurvivalStage
++        << ",\"next_survival_stage_counter\":"
++        << board->mNextSurvivalStageCounter
++        << ",\"last_stand_button_visible\":"
++        << (board->mStoreButton != nullptr &&
++                !board->mStoreButton->mBtnNoDraw
++            ? "true"
++            : "false")
++        << ",\"last_stand_button_disabled\":"
++        << (board->mStoreButton == nullptr ||
++                board->mStoreButton->mDisabled
++            ? "true"
++            : "false")
++        << ",\"board_buttons_interactable\":"
++        << (board->CanInteractWithBoardButtons() ? "true" : "false")
 +        << ",\"level_complete\":" << (board->mLevelComplete ? "true" : "false")
 +        << ",\"zombie_health\":" << healthAfter
 +        << ",\"mowers_ready\":" << board->CountUntriggerLawnMowers()
 +        << ",\"mowers_triggered\":" << board->mTriggeredLawnMowers
-+        << ",\"seed_bank_capacity\":" << board->mSeedBank->mNumPackets;
++        << ",\"seed_bank_capacity\":" << board->mSeedBank->mNumPackets
++        << ",\"packet_upgrades\":"
++        << app->mPlayerInfo->mPurchases[StoreItem::STORE_ITEM_PACKET_UPGRADE];
 +
 +    out << ",\"available_seed_types\":[";
 +    bool firstAvailableSeed = true;
@@ -517,8 +1634,16 @@ index 0000000..1111111
 +        out << "{\"type\":" << static_cast<int>(plant->mSeedType)
 +            << ",\"row\":" << plant->mRow
 +            << ",\"col\":" << plant->mPlantCol
++            << ",\"x\":" << plant->mX
++            << ",\"y\":" << plant->mY
 +            << ",\"health\":" << plant->mPlantHealth
-+            << ",\"state\":" << static_cast<int>(plant->mState) << '}';
++            << ",\"max_health\":" << plant->mPlantMaxHealth
++            << ",\"state\":" << static_cast<int>(plant->mState)
++            << ",\"state_countdown\":" << plant->mStateCountdown
++            << ",\"launch_counter\":" << plant->mLaunchCounter
++            << ",\"shooting_counter\":" << plant->mShootingCounter
++            << ",\"asleep\":" << (plant->mIsAsleep ? "true" : "false")
++            << ",\"squished\":" << (plant->mSquished ? "true" : "false") << '}';
 +    }
 +    out << ']';
 +
@@ -536,10 +1661,101 @@ index 0000000..1111111
 +            << ",\"row\":" << zombie->mRow
 +            << ",\"x\":" << zombie->mPosX
 +            << ",\"y\":" << zombie->mPosY
++            << ",\"velocity_x\":" << zombie->mVelX
++            << ",\"altitude\":" << zombie->mAltitude
 +            << ",\"body_health\":" << zombie->mBodyHealth
++            << ",\"body_max_health\":" << zombie->mBodyMaxHealth
 +            << ",\"helm_health\":" << zombie->mHelmHealth
 +            << ",\"shield_health\":" << zombie->mShieldHealth
-+            << ",\"phase\":" << static_cast<int>(zombie->mZombiePhase) << '}';
++            << ",\"phase\":" << static_cast<int>(zombie->mZombiePhase)
++            << ",\"phase_counter\":" << zombie->mPhaseCounter
++            << ",\"boss_mode\":" << zombie->mBossMode
++            << ",\"target_row\":" << zombie->mTargetRow
++            << ",\"boss_head_counter\":" << zombie->mBossHeadCounter
++            << ",\"fireball_row\":" << zombie->mFireballRow
++            << ",\"is_fireball\":" << (zombie->mIsFireBall ? "true" : "false")
++            << ",\"boss_ball_active\":"
++            << (
++                zombie->mBossFireBallReanimID
++                    != ReanimationID::REANIMATIONID_NULL
++                ? "true"
++                : "false")
++            << ",\"age\":" << zombie->mZombieAge
++            << ",\"from_wave\":" << zombie->mFromWave
++            << ",\"chilled_counter\":" << zombie->mChilledCounter
++            << ",\"buttered_counter\":" << zombie->mButteredCounter
++            << ",\"ice_trap_counter\":" << zombie->mIceTrapCounter
++            << ",\"eating\":" << (zombie->mIsEating ? "true" : "false")
++            << ",\"mind_controlled\":" << (zombie->mMindControlled ? "true" : "false")
++            << ",\"in_pool\":" << (zombie->mInPool ? "true" : "false") << '}';
++    }
++    out << ']';
++
++    out << ",\"projectiles\":[";
++    first = true;
++    Projectile* projectile = nullptr;
++    while (board->IterateProjectiles(projectile))
++    {
++        if (projectile->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"type\":" << static_cast<int>(projectile->mProjectileType)
++            << ",\"row\":" << projectile->mRow
++            << ",\"x\":" << projectile->mPosX
++            << ",\"y\":" << projectile->mPosY
++            << ",\"z\":" << projectile->mPosZ
++            << ",\"velocity_x\":" << projectile->mVelX
++            << ",\"velocity_y\":" << projectile->mVelY
++            << ",\"velocity_z\":" << projectile->mVelZ
++            << ",\"motion\":" << static_cast<int>(projectile->mMotionType)
++            << ",\"age\":" << projectile->mProjectileAge
++            << ",\"damage_flags\":" << projectile->mDamageRangeFlags << '}';
++    }
++    out << ']';
++
++    out << ",\"coins\":[";
++    first = true;
++    Coin* coin = nullptr;
++    while (board->IterateCoins(coin))
++    {
++        if (coin->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"type\":" << static_cast<int>(coin->mType)
++            << ",\"motion\":" << static_cast<int>(coin->mCoinMotion)
++            << ",\"x\":" << coin->mPosX
++            << ",\"y\":" << coin->mPosY
++            << ",\"velocity_x\":" << coin->mVelX
++            << ",\"velocity_y\":" << coin->mVelY
++            << ",\"age\":" << coin->mCoinAge
++            << ",\"being_collected\":" << (coin->mIsBeingCollected ? "true" : "false")
++            << ",\"hit_ground\":" << (coin->mHitGround ? "true" : "false") << '}';
++    }
++    out << ']';
++
++    out << ",\"grid_items\":[";
++    first = true;
++    GridItem* gridItem = nullptr;
++    while (board->IterateGridItems(gridItem))
++    {
++        if (gridItem->mDead)
++            continue;
++        if (!first)
++            out << ',';
++        first = false;
++        out << "{\"type\":" << static_cast<int>(gridItem->mGridItemType)
++            << ",\"state\":" << static_cast<int>(gridItem->mGridItemState)
++            << ",\"row\":" << gridItem->mGridY
++            << ",\"col\":" << gridItem->mGridX
++            << ",\"x\":" << gridItem->mPosX
++            << ",\"y\":" << gridItem->mPosY
++            << ",\"counter\":" << gridItem->mGridItemCounter
++            << ",\"zombie_type\":" << static_cast<int>(gridItem->mZombieType)
++            << ",\"seed_type\":" << static_cast<int>(gridItem->mSeedType) << '}';
 +    }
 +    out << ']';
 +
@@ -558,6 +1774,21 @@ index 0000000..1111111
 +            << ",\"type\":" << static_cast<int>(mower->mMowerType)
 +            << ",\"x\":" << mower->mPosX
 +            << ",\"visible\":" << (mower->mVisible ? "true" : "false") << '}';
++    }
++    out << ']';
++
++    out << ",\"available_interactions\":[";
++    bool firstInteraction = true;
++    if (LastStandStartAvailable(board))
++    {
++        out << "\"last_stand_start\"";
++        firstInteraction = false;
++    }
++    if (SurvivalRepickAvailable(board))
++    {
++        if (!firstInteraction)
++            out << ',';
++        out << "\"survival_repick\"";
 +    }
 +    out << ']';
 +
@@ -600,7 +1831,10 @@ index 0000000..1111111
 +        if (slot < board->mSeedBank->mNumPackets)
 +        {
 +            board->mSeedBank->mSeedPackets[slot].MouseDown(0, 0, 1);
-+            board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++            const int x = board->GridToPixelX(col, row) + 40;
++            const int y = board->GridToPixelY(col, row) + 40;
++            board->MouseDown(x, y, 1);
++            board->MouseUp(x, y, 1);
 +        }
 +        return;
 +    }
@@ -611,7 +1845,10 @@ index 0000000..1111111
 +        const int row = cell / kCols;
 +        const int col = cell % kCols;
 +        board->PickUpTool(GameObjectType::OBJECT_TYPE_SHOVEL);
-+        board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++        const int x = board->GridToPixelX(col, row) + 40;
++        const int y = board->GridToPixelY(col, row) + 40;
++        board->MouseDown(x, y, 1);
++        board->MouseUp(x, y, 1);
 +        return;
 +    }
 +
@@ -620,7 +1857,10 @@ index 0000000..1111111
 +        const int cell = action - kBoardClickActionBegin;
 +        const int row = cell / kCols;
 +        const int col = cell % kCols;
-+        board->MouseDown(board->GridToPixelX(col, row) + 40, board->GridToPixelY(col, row) + 40, 1);
++        const int x = board->GridToPixelX(col, row) + 40;
++        const int y = board->GridToPixelY(col, row) + 40;
++        board->MouseDown(x, y, 1);
++        board->MouseUp(x, y, 1);
 +        return;
 +    }
 +
@@ -638,22 +1878,45 @@ index 0000000..1111111
 +    app->mMusic->MusicUpdate();
 +}
 +
-+bool PickSeeds(LawnApp* app, SeedChooserScreen* chooser, const std::optional<std::vector<int>>& requestedSeeds)
++bool PickSeeds(
++    LawnApp* app,
++    SeedChooserScreen* chooser,
++    const std::optional<std::vector<int>>& requestedSeeds,
++    std::string* error = nullptr)
 +{
 +    std::vector<SeedType> candidates;
 +    Board* board = app->mBoard;
 +    if (requestedSeeds.has_value())
 +    {
 +        if (static_cast<int>(requestedSeeds->size()) != board->mSeedBank->mNumPackets)
++        {
++            if (error != nullptr)
++            {
++                *error =
++                    "requested " +
++                    std::to_string(requestedSeeds->size()) +
++                    " seeds for " +
++                    std::to_string(board->mSeedBank->mNumPackets) +
++                    " bank slots";
++            }
 +            return false;
++        }
 +        for (int raw : *requestedSeeds)
 +        {
 +            if (raw < static_cast<int>(SeedType::SEED_PEASHOOTER) ||
 +                raw >= static_cast<int>(SeedType::SEED_IMITATER))
++            {
++                if (error != nullptr)
++                    *error = "requested seed type is outside chooser range";
 +                return false;
++            }
 +            const SeedType seedType = static_cast<SeedType>(raw);
 +            if (std::find(candidates.begin(), candidates.end(), seedType) != candidates.end())
++            {
++                if (error != nullptr)
++                    *error = "requested seed types contain a duplicate";
 +                return false;
++            }
 +            candidates.push_back(seedType);
 +        }
 +    }
@@ -693,6 +1956,50 @@ index 0000000..1111111
 +    }
 +
 +    const int targetCount = board->mSeedBank->mNumPackets;
++    if (requestedSeeds.has_value() && chooser->mSeedsInBank == targetCount)
++    {
++        bool matchesRequestedSeeds = true;
++        for (int slot = 0; slot < targetCount; ++slot)
++        {
++            if (static_cast<int>(chooser->FindSeedInBank(slot)) !=
++                (*requestedSeeds)[slot])
++            {
++                matchesRequestedSeeds = false;
++                break;
++            }
++        }
++        if (matchesRequestedSeeds)
++        {
++            chooser->CloseSeedChooser();
++            return true;
++        }
++    }
++
++    if (requestedSeeds.has_value() && chooser->mSeedsInBank > 0)
++    {
++        for (int raw = static_cast<int>(SeedType::SEED_PEASHOOTER);
++             raw < static_cast<int>(SeedType::NUM_SEEDS_IN_CHOOSER);
++             ++raw)
++        {
++            ChosenSeed& chosen =
++                chooser->mChosenSeeds[static_cast<SeedType>(raw)];
++            if (chosen.mSeedState != ChosenSeedState::SEED_IN_BANK &&
++                chosen.mSeedState != ChosenSeedState::SEED_FLYING_TO_BANK)
++                continue;
++            chooser->GetSeedPositionInChooser(raw, chosen.mX, chosen.mY);
++            chosen.mStartX = chosen.mX;
++            chosen.mStartY = chosen.mY;
++            chosen.mEndX = chosen.mX;
++            chosen.mEndY = chosen.mY;
++            chosen.mTimeStartMotion = 0;
++            chosen.mTimeEndMotion = 0;
++            chosen.mSeedState = ChosenSeedState::SEED_IN_CHOOSER;
++            chosen.mSeedIndexInBank = -1;
++        }
++        chooser->mSeedsInBank = 0;
++        chooser->mSeedsInFlight = 0;
++    }
++
 +    auto choose = [&](SeedType seedType)
 +    {
 +        if (chooser->mSeedsInBank >= targetCount || !app->HasSeedType(seedType))
@@ -717,7 +2024,25 @@ index 0000000..1111111
 +    for (SeedType seedType : candidates)
 +    {
 +        if (!choose(seedType) && requestedSeeds.has_value())
++        {
++            if (error != nullptr)
++            {
++                const ChosenSeed& chosen = chooser->mChosenSeeds[seedType];
++                std::ostringstream message;
++                message << "seed " << static_cast<int>(seedType)
++                        << " rejected at slot " << chooser->mSeedsInBank
++                        << " with chooser state "
++                        << static_cast<int>(chosen.mSeedState)
++                        << ", available="
++                        << (app->HasSeedType(seedType) ? "true" : "false")
++                        << ", allowed="
++                        << (!chooser->SeedNotAllowedToPick(seedType)
++                            ? "true"
++                            : "false");
++                *error = message.str();
++            }
 +            return false;
++        }
 +    }
 +    if (!requestedSeeds.has_value())
 +    {
@@ -727,28 +2052,114 @@ index 0000000..1111111
 +            choose(static_cast<SeedType>(raw));
 +    }
 +    if (chooser->mSeedsInBank != targetCount)
++    {
++        if (error != nullptr)
++        {
++            *error =
++                "seed chooser retained " +
++                std::to_string(chooser->mSeedsInBank) +
++                " of " +
++                std::to_string(targetCount) +
++                " requested packets";
++        }
 +        return false;
++    }
 +    chooser->CloseSeedChooser();
 +    return true;
 +}
 +
-+bool ResetLevel(
++std::string ApplySurvivalRepick(
 +    LawnApp* app,
++    const std::optional<std::vector<int>>& requestedSeeds)
++{
++    if (app->mBoard == nullptr || app->mPlayerInfo == nullptr ||
++        !SurvivalRepickAvailable(app->mBoard))
++        return "survival repick unavailable before transition";
++
++    const int savedProfileLevel = app->mPlayerInfo->GetLevel();
++    app->mPlayerInfo->SetLevel(FINAL_LEVEL);
++    app->CheckForGameEnd();
++    if (app->mBoard == nullptr || app->mSeedChooserScreen == nullptr)
++    {
++        app->mPlayerInfo->SetLevel(savedProfileLevel);
++        return "survival repick did not reach the seed chooser";
++    }
++
++    std::string selectionError;
++    const bool picked =
++        PickSeeds(
++            app,
++            app->mSeedChooserScreen,
++            requestedSeeds,
++            &selectionError);
++    app->mPlayerInfo->SetLevel(savedProfileLevel);
++    if (!picked)
++        return selectionError.empty()
++            ? "survival repick seed selection failed"
++            : selectionError;
++
++    app->mBoardResult = BoardResult::BOARDRESULT_NONE;
++    app->StartPlaying();
++    UpdateEngineTick(app);
++    return {};
++}
++
++bool ResetBoard(
++    LawnApp* app,
++    GameMode gameMode,
 +    int level,
 +    int seed,
 +    bool disableMowers,
++    int packetUpgrades,
++    bool purchasedSeedUpgrades,
++    bool purchasedPoolCleaner,
++    bool purchasedRoofCleaner,
 +    const std::optional<std::vector<int>>& requestedSeeds)
 +{
-+    if (level < 1 || level > FINAL_LEVEL || app->mPlayerInfo == nullptr)
++    if (app->mPlayerInfo == nullptr)
++        return false;
++    if (gameMode == GameMode::GAMEMODE_ADVENTURE &&
++        (level < 1 || level > FINAL_LEVEL))
 +        return false;
 +
++    const int savedProfileLevel = app->mPlayerInfo->GetLevel();
++    app->mPlayerInfo->SetLevel(
++        gameMode == GameMode::GAMEMODE_ADVENTURE ? level : FINAL_LEVEL);
++    // The bridge always runs against an isolated save directory.  Model the
++    // four packet-slot purchases explicitly so terminal verification can use
++    // any human-legal 6..10-slot GOTY profile without changing game rules.
++    app->mPlayerInfo->mPurchases[StoreItem::STORE_ITEM_PACKET_UPGRADE] =
++        static_cast<uint32_t>(packetUpgrades);
++    constexpr StoreItem seedUpgradePurchases[] = {
++        StoreItem::STORE_ITEM_PLANT_GATLINGPEA,
++        StoreItem::STORE_ITEM_PLANT_TWINSUNFLOWER,
++        StoreItem::STORE_ITEM_PLANT_GLOOMSHROOM,
++        StoreItem::STORE_ITEM_PLANT_CATTAIL,
++        StoreItem::STORE_ITEM_PLANT_WINTERMELON,
++        StoreItem::STORE_ITEM_PLANT_GOLD_MAGNET,
++        StoreItem::STORE_ITEM_PLANT_SPIKEROCK,
++        StoreItem::STORE_ITEM_PLANT_COBCANNON,
++    };
++    for (StoreItem purchase : seedUpgradePurchases)
++    {
++        app->mPlayerInfo->mPurchases[purchase] =
++            purchasedSeedUpgrades ? 1U : 0U;
++    }
++    app->mPlayerInfo->mPurchases[StoreItem::STORE_ITEM_POOL_CLEANER] =
++        purchasedPoolCleaner ? 1U : 0U;
++    app->mPlayerInfo->mPurchases[StoreItem::STORE_ITEM_ROOF_CLEANER] =
++        purchasedRoofCleaner ? 1U : 0U;
++    app->KillBoard();
++    // Board teardown can release effects that consume the global RNG. Seed
++    // only after the old board is gone so a reset depends on the requested
++    // seed, not on which level happened to run previously in this process.
 +    app->mAppRandSeed = seed;
 +    app->mRandSeed = static_cast<uint32_t>(seed);
 +    SRand(static_cast<uint32_t>(seed));
 +    std::srand(static_cast<unsigned int>(seed));
-+    app->mPlayerInfo->SetLevel(level);
-+    app->mGameMode = GameMode::GAMEMODE_ADVENTURE;
++    app->mGameMode = gameMode;
 +    app->mMusic->mMusicDisabled = true;
++    app->mMuteSoundsForCutscene = true;
 +    app->MakeNewBoard();
 +    app->mBoard->InitLevel();
 +    app->mBoard->mCutScene->PreloadResources();
@@ -761,16 +2172,125 @@ index 0000000..1111111
 +    app->mGameScene = GameScenes::SCENE_LEVEL_INTRO;
 +    app->ShowSeedChooserScreen();
 +    if (app->mBoard == nullptr)
++    {
++        if (gameMode != GameMode::GAMEMODE_ADVENTURE)
++            app->mPlayerInfo->SetLevel(savedProfileLevel);
 +        return false;
++    }
 +
 +    if (app->mSeedChooserScreen != nullptr && app->mBoard->ChooseSeedsOnCurrentLevel() &&
 +        !PickSeeds(app, app->mSeedChooserScreen, requestedSeeds))
++    {
++        if (gameMode != GameMode::GAMEMODE_ADVENTURE)
++            app->mPlayerInfo->SetLevel(savedProfileLevel);
 +        return false;
++    }
 +    app->StartPlaying();
++    FinishSkippedCutsceneLawnMowers(app->mBoard);
 +    UpdateEngineTick(app);
 +    if (disableMowers)
 +        RemoveAllMowers(app->mBoard);
++    if (gameMode != GameMode::GAMEMODE_ADVENTURE)
++        app->mPlayerInfo->SetLevel(savedProfileLevel);
 +    return true;
++}
++
++bool ResetLevel(
++    LawnApp* app,
++    int level,
++    int seed,
++    bool disableMowers,
++    int packetUpgrades,
++    bool purchasedSeedUpgrades,
++    bool purchasedPoolCleaner,
++    bool purchasedRoofCleaner,
++    const std::optional<std::vector<int>>& requestedSeeds)
++{
++    return ResetBoard(
++        app,
++        GameMode::GAMEMODE_ADVENTURE,
++        level,
++        seed,
++        disableMowers,
++        packetUpgrades,
++        purchasedSeedUpgrades,
++        purchasedPoolCleaner,
++        purchasedRoofCleaner,
++        requestedSeeds);
++}
++
++bool ResetGameMode(
++    LawnApp* app,
++    int rawGameMode,
++    int seed,
++    bool disableMowers,
++    int packetUpgrades,
++    bool purchasedSeedUpgrades,
++    bool purchasedPoolCleaner,
++    bool purchasedRoofCleaner,
++    const std::optional<std::vector<int>>& requestedSeeds)
++{
++    if (rawGameMode < static_cast<int>(GameMode::GAMEMODE_SURVIVAL_NORMAL_STAGE_1) ||
++        rawGameMode >= static_cast<int>(GameMode::GAMEMODE_UPSELL))
++        return false;
++    return ResetBoard(
++        app,
++        static_cast<GameMode>(rawGameMode),
++        0,
++        seed,
++        disableMowers,
++        packetUpgrades,
++        purchasedSeedUpgrades,
++        purchasedPoolCleaner,
++        purchasedRoofCleaner,
++        requestedSeeds);
++}
++
++bool SaveCurrentBoard(LawnApp* app)
++{
++    if (app->mBoard == nullptr || app->mPlayerInfo == nullptr ||
++        !app->mBoard->NeedSaveGame())
++        return false;
++
++    app->mBoard->TryToSaveGame();
++    app->WriteCurrentUserConfig();
++    app->mProfileMgr->Save();
++    app->WriteToRegistry();
++    return app->FileExists(GetSavedGameName(app->mGameMode, app->mPlayerInfo->mId));
++}
++
++bool FlushCurrentProfile(LawnApp* app)
++{
++    if (app->mPlayerInfo == nullptr || app->mProfileMgr == nullptr)
++        return false;
++
++    app->WriteCurrentUserConfig();
++    app->mProfileMgr->Save();
++    app->WriteToRegistry();
++    return true;
++}
++
++bool LoadSavedBoard(LawnApp* app, int rawGameMode)
++{
++    if (app->mPlayerInfo == nullptr ||
++        rawGameMode < static_cast<int>(GameMode::GAMEMODE_ADVENTURE) ||
++        rawGameMode >= static_cast<int>(GameMode::GAMEMODE_UPSELL))
++        return false;
++
++    if (app->mBoard != nullptr)
++        app->KillBoard();
++    app->mGameMode = static_cast<GameMode>(rawGameMode);
++    app->mMusic->mMusicDisabled = true;
++    app->mMuteSoundsForCutscene = true;
++    if (!app->TryLoadGame() || app->mBoard == nullptr)
++        return false;
++
++    ContinueDialog* dialog = static_cast<ContinueDialog*>(
++        app->GetDialog(Dialogs::DIALOG_CONTINUE));
++    if (dialog == nullptr)
++        return false;
++    dialog->ButtonDepress(ContinueDialog::ContinueDialog_Continue);
++    return app->GetDialog(Dialogs::DIALOG_CONTINUE) == nullptr;
 +}
 +}
 +
@@ -797,7 +2317,33 @@ index 0000000..1111111
 +    gLawnApp->mLoadingThreadCompleted = true;
 +    gLawnApp->mLoaded = true;
 +
-+    ProtocolLine("{\"ok\":true,\"ready\":true,\"protocol_version\":3,\"action_count\":" + std::to_string(kActionCount) + "}");
++#if defined(PVZ_MACOS_METAL)
++    constexpr std::string_view rendererName = "metal";
++#else
++    constexpr std::string_view rendererName = "opengl";
++#endif
++    std::ostringstream ready;
++    ready << "{\"ok\":true,\"ready\":true,\"protocol_version\":4,\"renderer\":\""
++          << rendererName
++          << "\",\"action_count\":" << kActionCount
++          << ",\"profile_count\":" << gLawnApp->mProfileMgr->GetNumProfiles()
++          << ",\"profile\":";
++    if (gLawnApp->mPlayerInfo == nullptr)
++    {
++        ready << "null";
++    }
++    else
++    {
++        const PlayerInfo* profile = gLawnApp->mPlayerInfo;
++        ready << "{\"name\":\"" << JsonEscape(profile->mName)
++              << "\",\"id\":" << profile->mId
++              << ",\"adventure_level\":" << profile->GetLevel()
++              << ",\"coins\":" << profile->mCoins
++              << ",\"finished_adventure\":" << profile->mFinishedAdventure
++              << '}';
++    }
++    ready << '}';
++    ProtocolLine(ready.str());
 +
 +    std::string line;
 +    while (std::getline(std::cin, line))
@@ -809,18 +2355,57 @@ index 0000000..1111111
 +        }
 +        else if (command == "reset")
 +        {
-+            const int level = JsonInt(line, "level").value_or(1);
++            const std::optional<int> gameMode = JsonInt(line, "game_mode");
 +            const int seed = JsonInt(line, "seed").value_or(0);
 +            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
 +            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
 +            const bool disableMowers = JsonInt(line, "disable_mowers").value_or(0) != 0;
++            const int packetUpgrades =
++                JsonInt(line, "packet_upgrades").value_or(0);
++            const bool purchasedSeedUpgrades =
++                JsonInt(line, "purchased_seed_upgrades").value_or(0) != 0;
++            const bool purchasedPoolCleaner =
++                JsonInt(line, "purchased_pool_cleaner").value_or(0) != 0;
++            const bool purchasedRoofCleaner =
++                JsonInt(line, "purchased_roof_cleaner").value_or(0) != 0;
 +            const std::optional<std::vector<int>> seedTypes = JsonIntArray(line, "seed_types");
 +            if (line.find("\"seed_types\"") != std::string::npos && !seedTypes.has_value())
 +            {
 +                ProtocolLine("{\"ok\":false,\"error\":\"invalid seed_types\"}");
 +                continue;
 +            }
-+            if (!ResetLevel(gLawnApp, level, seed, disableMowers, seedTypes))
++            if (gameMode.has_value() && line.find("\"level\"") != std::string::npos)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"level and game_mode are mutually exclusive\"}");
++                continue;
++            }
++            if (packetUpgrades < 0 || packetUpgrades > 4)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"packet_upgrades must be in 0..4\"}");
++                continue;
++            }
++            const bool reset = gameMode.has_value()
++                ? ResetGameMode(
++                    gLawnApp,
++                    *gameMode,
++                    seed,
++                    disableMowers,
++                    packetUpgrades,
++                    purchasedSeedUpgrades,
++                    purchasedPoolCleaner,
++                    purchasedRoofCleaner,
++                    seedTypes)
++                : ResetLevel(
++                    gLawnApp,
++                    JsonInt(line, "level").value_or(1),
++                    seed,
++                    disableMowers,
++                    packetUpgrades,
++                    purchasedSeedUpgrades,
++                    purchasedPoolCleaner,
++                    purchasedRoofCleaner,
++                    seedTypes);
++            if (!reset)
 +                ProtocolLine("{\"ok\":false,\"error\":\"reset failed\"}");
 +            else
 +                ProtocolLine(ObservationJson(gLawnApp, kWaitAction, 1, -1, frameWidth, frameHeight));
@@ -847,7 +2432,12 @@ index 0000000..1111111
 +                UpdateEngineTick(gLawnApp);
 +                currentHealth = TotalZombieHealth(gLawnApp->mBoard);
 +                damageDealt += std::max(0, previousHealth - currentHealth);
-+                if (gLawnApp->mBoardResult == BoardResult::BOARDRESULT_WON ||
++                const bool intermediateSurvivalWin =
++                    gLawnApp->mBoardResult == BoardResult::BOARDRESULT_WON &&
++                    gLawnApp->mBoard->mApp->IsSurvivalMode() &&
++                    gLawnApp->mBoard->IsSurvivalStageWithRepick();
++                if ((!intermediateSurvivalWin &&
++                        gLawnApp->mBoardResult == BoardResult::BOARDRESULT_WON) ||
 +                    gLawnApp->mBoardResult == BoardResult::BOARDRESULT_LOST)
 +                    break;
 +            }
@@ -855,11 +2445,117 @@ index 0000000..1111111
 +            const int rewardHealthBefore = TotalZombieHealth(gLawnApp->mBoard) + damageDealt;
 +            ProtocolLine(ObservationJson(gLawnApp, action, ticks, rewardHealthBefore, frameWidth, frameHeight));
 +        }
++        else if (command == "interact")
++        {
++            if (gLawnApp->mBoard == nullptr)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"reset required\"}");
++                continue;
++            }
++            const std::string interaction =
++                JsonString(line, "interaction").value_or("");
++            const std::optional<std::vector<int>> seedTypes =
++                JsonIntArray(line, "seed_types");
++            if (line.find("\"seed_types\"") != std::string::npos &&
++                !seedTypes.has_value())
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"invalid seed_types\"}");
++                continue;
++            }
++            bool applied = false;
++            std::string interactionError;
++            if (interaction == "survival_repick")
++            {
++                interactionError =
++                    ApplySurvivalRepick(gLawnApp, seedTypes);
++                applied = interactionError.empty();
++            }
++            else
++            {
++                applied = ApplyInteraction(gLawnApp->mBoard, interaction);
++            }
++            if (!applied)
++            {
++                ProtocolLine(
++                    "{\"ok\":false,\"error\":\"" +
++                    JsonEscape(
++                        interactionError.empty()
++                            ? "interaction unavailable"
++                            : interactionError) +
++                    "\"}");
++                continue;
++            }
++            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
++            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
++            ProtocolLine(ObservationJson(
++                gLawnApp,
++                kWaitAction,
++                0,
++                -1,
++                frameWidth,
++                frameHeight));
++        }
 +        else if (command == "observe")
 +        {
 +            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
 +            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
 +            ProtocolLine(ObservationJson(gLawnApp, kWaitAction, 0, -1, frameWidth, frameHeight));
++        }
++        else if (command == "save")
++        {
++            if (!SaveCurrentBoard(gLawnApp))
++                ProtocolLine("{\"ok\":false,\"error\":\"save failed\"}");
++            else
++                ProtocolLine("{\"ok\":true,\"saved\":true}");
++        }
++        else if (command == "finalize_win")
++        {
++            if (gLawnApp->mBoard == nullptr ||
++                gLawnApp->mBoardResult != BoardResult::BOARDRESULT_WON ||
++                !gLawnApp->mBoard->mLevelComplete)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"no completed win to finalize\"}");
++                continue;
++            }
++            const int completedLevel = gLawnApp->mBoard->mLevel;
++            gLawnApp->CheckForGameEnd();
++            if (gLawnApp->mPlayerInfo == nullptr)
++            {
++                ProtocolLine("{\"ok\":false,\"error\":\"win finalization lost profile\"}");
++                continue;
++            }
++            std::ostringstream finalized;
++            finalized
++                << "{\"ok\":true,\"win_finalized\":true"
++                << ",\"completed_level\":" << completedLevel
++                << ",\"adventure_level\":"
++                << gLawnApp->mPlayerInfo->GetLevel() << '}';
++            ProtocolLine(finalized.str());
++        }
++        else if (command == "flush_profile")
++        {
++            if (!FlushCurrentProfile(gLawnApp))
++                ProtocolLine("{\"ok\":false,\"error\":\"profile flush failed\"}");
++            else
++                ProtocolLine("{\"ok\":true,\"profile_flushed\":true}");
++        }
++        else if (command == "load")
++        {
++            const int frameWidth = JsonInt(line, "frame_width").value_or(0);
++            const int frameHeight = JsonInt(line, "frame_height").value_or(0);
++            if (!LoadSavedBoard(
++                    gLawnApp,
++                    JsonInt(line, "game_mode").value_or(
++                        static_cast<int>(GameMode::GAMEMODE_ADVENTURE))))
++                ProtocolLine("{\"ok\":false,\"error\":\"load failed\"}");
++            else
++                ProtocolLine(ObservationJson(
++                    gLawnApp,
++                    kWaitAction,
++                    0,
++                    -1,
++                    frameWidth,
++                    frameHeight));
 +        }
 +        else if (command == "quit")
 +        {
@@ -875,4 +2571,2626 @@ index 0000000..1111111
 +    gLawnApp->Shutdown();
 +    delete gLawnApp;
 +    return 0;
++}
+diff --git a/src/Sexy.TodLib/TodList.h b/src/Sexy.TodLib/TodList.h
+index c4f2ff1..9f8068d 100644
+--- a/src/Sexy.TodLib/TodList.h
++++ b/src/Sexy.TodLib/TodList.h
+@@ -96,8 +96,10 @@ public:
+             mpAllocator = FindGlobalAllocator(sizeof(TodListNode<T>));
+ 
+         TodListNode<T>* aNode = (TodListNode<T>*)mpAllocator->Calloc(sizeof(TodListNode<T>));
+-        if (aNode)
+-            aNode->mValue = theHead;
++        TOD_ASSERT(aNode != nullptr);
++        if (aNode == nullptr)
++            return;
++        aNode->mValue = theHead;
+         aNode->mNext = mHead;  // 新节点的下一个节点指向原节点
+         aNode->mPrev = nullptr;  // 新节点作为头部，不存在上一个节点
+         if (mHead)
+@@ -114,8 +116,10 @@ public:
+             mpAllocator = FindGlobalAllocator(sizeof(TodListNode<T>));
+ 
+         TodListNode<T>* aNode = (TodListNode<T>*)mpAllocator->Calloc(sizeof(TodListNode<T>));
+-        if (aNode)
+-            aNode->mValue = theTail;
++        TOD_ASSERT(aNode != nullptr);
++        if (aNode == nullptr)
++            return;
++        aNode->mValue = theTail;
+         aNode->mNext = nullptr;
+         aNode->mPrev = mTail;
+         if (mTail)
+diff --git a/src/Sexy.TodLib/TodStringFile.cpp b/src/Sexy.TodLib/TodStringFile.cpp
+index 760ecc8..d5ced9d 100644
+--- a/src/Sexy.TodLib/TodStringFile.cpp
++++ b/src/Sexy.TodLib/TodStringFile.cpp
+@@ -280,7 +280,7 @@ int TodWriteString(Graphics* g, const std::string& theString, int theX, int theY
+ 				aXOffset += aFont->StringWidth(aString);  // 横向偏移值加上绘制的字符串的宽度
+ 				aString.assign("");  // 清空字符串
+ 				TodWriteStringSetFormat(aFormatStart + 1, theCurrentFormat);  // 根据当前控制字符调整格式
+-				// _Font* aFont = *theCurrentFormat.mNewFont; // unused
++				aFont = *theCurrentFormat.mNewFont;
+ 			}
+ 		}
+ 		else
+@@ -321,15 +321,16 @@ int TodWriteWordWrappedHelper(Graphics* g, const std::string& theString, int the
+ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Rect& theRect, _Font* theFont, const Color& theColor, DrawStringJustification theJustification, bool drawString)
+ {
+ 	int theMaxChars = theText.size();
+-	TodStringListFormat aCurrentFormat;
+-	aCurrentFormat.mNewFont = &theFont;
+-	aCurrentFormat.mNewColor = theColor;
+-	aCurrentFormat.mFormatName = "";
+-	aCurrentFormat.mLineSpacingOffset = 0;
+-	aCurrentFormat.mFormatFlags = 0U;
++	TodStringListFormat aLineFormat;
++	aLineFormat.mNewFont = &theFont;
++	aLineFormat.mNewColor = theColor;
++	aLineFormat.mFormatName = "";
++	aLineFormat.mLineSpacingOffset = 0;
++	aLineFormat.mFormatFlags = 0U;
++	TodStringListFormat aScanFormat = aLineFormat;
+ 
+ 	int aYOffset = theFont->GetAscent() - theFont->GetAscentPadding();
+-	int aLineSpacing = theFont->GetLineSpacing() + aCurrentFormat.mLineSpacingOffset;
++	int aLineSpacing = theFont->GetLineSpacing() + aLineFormat.mLineSpacingOffset;
+ 	size_t aLineFeedPos = 0;
+ 	size_t aCurPos = 0;
+ 	int aCurWidth = 0;
+@@ -353,13 +354,7 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			if (aFmtEnd != nullptr)
+ 			{
+ 				aCurPos += aFmtEnd - aFmtStart + 1;
+-				int aOldAscentOffset = theFont->GetAscent() - theFont->GetAscentPadding();
+-				Color aExistingColor = aCurrentFormat.mNewColor;
+-				TodWriteStringSetFormat(aFormat, aCurrentFormat);
+-				aCurrentFormat.mNewColor = aExistingColor;
+-				int aNewAscentOffset = (*aCurrentFormat.mNewFont)->GetAscent() - (*aCurrentFormat.mNewFont)->GetAscentPadding();
+-				aLineSpacing = (*aCurrentFormat.mNewFont)->GetLineSpacing() + aCurrentFormat.mLineSpacingOffset;
+-				aYOffset += aNewAscentOffset - aOldAscentOffset;
++				TodWriteStringSetFormat(aFormat, aScanFormat);
+ 				continue;
+ 			}
+ 		}
+@@ -373,9 +368,9 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			continue;
+ 		size_t aCharEnd = aCurPos;
+ 		bool aIsNewline = (aCurChar == U'\n') &&
+-			!TestBit(aCurrentFormat.mFormatFlags, TodStringFormatFlag::TOD_FORMAT_IGNORE_NEWLINES);
++			!TestBit(aScanFormat.mFormatFlags, TodStringFormatFlag::TOD_FORMAT_IGNORE_NEWLINES);
+ 		bool aIsSpace = !aIsNewline && (aCurChar == U' ' ||
+-			(aCurChar < 0x80 && CharIsSpaceInFormat(static_cast<char>(aCurChar), aCurrentFormat)));
++			(aCurChar < 0x80 && CharIsSpaceInFormat(static_cast<char>(aCurChar), aScanFormat)));
+ 
+ 		if (aIsSpace)
+ 		{
+@@ -392,7 +387,7 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			aCurWidth = theRect.mWidth + 1;
+ 		}
+ 
+-		aCurWidth += (*aCurrentFormat.mNewFont)->CharWidthKern(aCurChar, aPrevChar);
++		aCurWidth += (*aScanFormat.mNewFont)->CharWidthKern(aCurChar, aPrevChar);
+ 
+ 		if (!aIsSpace && !aIsNewline && Sexy::IsAutoBreakChar(aCurChar) &&
+ 			!Sexy::IsClosingPunctuation(aCurChar) &&
+@@ -407,31 +402,10 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 
+ 		if (aCurWidth > theRect.mWidth)
+ 		{
+-			int aLineWidth;
++			size_t aDrawEnd;
+ 			if (aBreakDrawLen >= 0)
+ 			{
+-				int aCurY = static_cast<int>(g->mTransY) + theRect.mY + aYOffset;
+-				if (aCurY >= g->mClipRect.mY && aCurY <= g->mClipRect.mY + g->mClipRect.mHeight + aLineSpacing)
+-				{
+-					TodWriteWordWrappedHelper(
+-						g,
+-						theText,
+-						theRect.mX,
+-						theRect.mY + aYOffset,
+-						aCurrentFormat,
+-						theRect.mWidth,
+-						theJustification,
+-						drawString,
+-						aLineFeedPos,
+-						aBreakDrawLen,
+-						theMaxChars
+-					);
+-				}
+-
+-				aLineWidth = aCurWidth;
+-				if (aLineWidth < 0)
+-					break;
+-
++				aDrawEnd = aLineFeedPos + aBreakDrawLen;
+ 				aCurPos = aBreakResumePos;
+ 				if (aBreakSkipSpaces)
+ 					while (aCurPos < theText.size() && theText[aCurPos] == ' ')
+@@ -440,32 +414,39 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			else
+ 			{
+ 				// No break point: force break, ensure at least one char per line
+-				size_t aDrawEnd = aCharStart;
++				aDrawEnd = aCharStart;
+ 				if (aDrawEnd <= aLineFeedPos)
+ 					aDrawEnd = aCharEnd;
+-
+-				aLineWidth = TodWriteWordWrappedHelper(
+-					g,
+-					theText,
+-					theRect.mX,
+-					theRect.mY + aYOffset,
+-					aCurrentFormat,
+-					theRect.mWidth,
+-					theJustification,
+-					drawString,
+-					aLineFeedPos,
+-					aDrawEnd - aLineFeedPos,
+-					theMaxChars
+-				);
+-				if (aLineWidth < 0)
+-					break;
+-
+ 				aCurPos = aDrawEnd;
+ 			}
+ 
++			int aCurY = static_cast<int>(g->mTransY) + theRect.mY + aYOffset;
++			bool aLineIsVisible =
++				aCurY >= g->mClipRect.mY &&
++				aCurY <= g->mClipRect.mY + g->mClipRect.mHeight + aLineSpacing;
++			int aLineWidth = TodWriteWordWrappedHelper(
++				g,
++				theText,
++				theRect.mX,
++				theRect.mY + aYOffset,
++				aLineFormat,
++				theRect.mWidth,
++				theJustification,
++				drawString && aLineIsVisible,
++				aLineFeedPos,
++				aDrawEnd - aLineFeedPos,
++				theMaxChars
++			);
++			if (aLineWidth < 0)
++				break;
++
+ 			aMaxWidth = std::max(aMaxWidth, aLineWidth);
++			aLineSpacing =
++				(*aLineFormat.mNewFont)->GetLineSpacing() +
++				aLineFormat.mLineSpacingOffset;
+ 			aYOffset += aLineSpacing;
+ 			aLineFeedPos = aCurPos;
++			aScanFormat = aLineFormat;
+ 			aBreakDrawLen = -1;
+ 			aCurWidth = 0;
+ 			aPrevChar = 0;
+@@ -479,7 +460,7 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			theText,
+ 			theRect.mX,
+ 			theRect.mY + aYOffset,
+-			aCurrentFormat,
++			aLineFormat,
+ 			theRect.mWidth,
+ 			theJustification,
+ 			drawString,
+@@ -488,12 +469,17 @@ int TodDrawStringWrappedHelper(Graphics* g, const std::string& theText, const Re
+ 			theMaxChars
+ 		);  // 绘制最后一行的文本
+ 		if (aLastLineLength >= 0)
++		{
++			aLineSpacing =
++				(*aLineFormat.mNewFont)->GetLineSpacing() +
++				aLineFormat.mLineSpacingOffset;
+ 			aYOffset += aLineSpacing;
++		}
+ 	}
+ 	else
+ 		aYOffset += aLineSpacing;
+ 
+-	return (*aCurrentFormat.mNewFont)->GetDescent() + aYOffset - aLineSpacing;
++	return (*aLineFormat.mNewFont)->GetDescent() + aYOffset - aLineSpacing;
+ }
+ 
+ // GOTY @Patoke: 0x5246A0
+diff --git a/src/SexyAppFramework/Common.cpp b/src/SexyAppFramework/Common.cpp
+index 9738638..354bdf0 100644
+--- a/src/SexyAppFramework/Common.cpp
++++ b/src/SexyAppFramework/Common.cpp
+@@ -110,6 +110,25 @@ void Sexy::SRand(ulong theSeed)
+ 	gMTRand.SRand(theSeed);
+ }
+ 
++int Sexy::RandStateIndex()
++{
++	return gMTRand.StateIndex();
++}
++
++std::string Sexy::GetRandState()
++{
++	return gMTRand.Serialize();
++}
++
++bool Sexy::SetRandState(std::string_view theState)
++{
++	if (theState.size() != MTRand::SERIALIZED_SIZE)
++		return false;
++
++	gMTRand.SRand(std::string(theState));
++	return true;
++}
++
+ std::string Sexy::GetAppDataFolder()
+ {
+ 	return PathToU8(Sexy::gAppDataFolder);
+diff --git a/src/SexyAppFramework/Common.h b/src/SexyAppFramework/Common.h
+index d1b5215..9bd4d91 100644
+--- a/src/SexyAppFramework/Common.h
++++ b/src/SexyAppFramework/Common.h
+@@ -133,6 +133,9 @@ int					Rand();
+ int					Rand(int range);
+ float				Rand(float range);
+ void				SRand(ulong theSeed);
++int					RandStateIndex();
++std::string			GetRandState();
++bool				SetRandState(std::string_view theState);
+ extern std::string	VFormat(const char* fmt, va_list argPtr);
+ extern std::string	StrFormat(const char* fmt ...);
+ std::string			GetAppDataFolder();
+diff --git a/src/SexyAppFramework/SexyAppBase.cpp b/src/SexyAppFramework/SexyAppBase.cpp
+index 6a473ed..c616afb 100644
+--- a/src/SexyAppFramework/SexyAppBase.cpp
++++ b/src/SexyAppFramework/SexyAppBase.cpp
+@@ -29,6 +29,7 @@
+ #include <string>
+ #include <string_view>
+ #include <fstream>
++#include <limits>
+ #include <time.h>
+ #include <math.h>
+ #include <vector>
+@@ -238,6 +239,7 @@ SexyAppBase::SexyAppBase()
+ #endif
+ 	mIsPhysWindowed = true;
+ 	mFullScreenWindow = false;
++	mNativeWindowResolution = false;
+ 	mPreferredX = -1;
+ 	mPreferredY = -1;
+ 	mIsScreenSaver = false;
+@@ -294,6 +296,7 @@ SexyAppBase::SexyAppBase()
+ 	mForceFullscreen = false;
+ #endif
+ 	mForceWindowed = false;
++	mStartupWindowMode = -1;
+ 	mHasFocus = true;			
+ 	mCustomCursorsEnabled = false;	
+ 	mCustomCursorDirty = false;
+@@ -387,6 +390,12 @@ SexyAppBase::SexyAppBase()
+ 	mHasCustomDemoFile = false;
+ 	mDemoRecordFileLimit = 0;
+ 	mDemoPlayIndex = 0;
++	mDemoExpectedUpdateCount = 0;
++	mDemoVerificationTarget = 0;
++	mDemoReportNextUpdate = 1000;
++	mDemoBlackout = false;
++	mDemoHidden = false;
++	mDemoReportPath.clear();
+ 	mPlayingDemoBuffer = false;
+ 	mManualShutdown = false;
+ 	mRecordingDemoBuffer = false;
+@@ -581,8 +590,9 @@ bool SexyAppBase::ReadDemoBuffer(std::string &theError)
+ 	}
+ 
+ 	// Read demo commands
+-	uint32_t aDemoLengthLE; // unused by playback; consumed only to keep the stream aligned
++	uint32_t aDemoLengthLE;
+ 	if (!aFile.read(reinterpret_cast<char*>(&aDemoLengthLE), sizeof(aDemoLengthLE))) return false;
++	mDemoExpectedUpdateCount = FromLE32(aDemoLengthLE);
+ 	aBytesLeft -= 4;
+ 	
+ 	if (aBytesLeft <= 0)
+@@ -2126,7 +2136,7 @@ void SexyAppBase::ProcessDemo()
+ 	{
+ 		if (mDemoBuffer.AtEnd()) // a recording that didn't end with DEMO_CLOSE: treat stream end as end of demo
+ 		{
+-			Shutdown();
++			FinishDemoPlayback();
+ 			return;
+ 		}
+ 
+@@ -2242,7 +2252,7 @@ void SexyAppBase::ProcessDemo()
+ 						}
+ 						break;
+ 					case DEMO_CLOSE:
+-						Shutdown();
++						FinishDemoPlayback();
+ 						break;
+ 					case DEMO_MOUSE_ENTER:
+ 						mMouseIn = true;
+@@ -2274,8 +2284,11 @@ void SexyAppBase::ProcessDemo()
+ 					case DEMO_ASSERT_INT_EQUAL:
+ 						if (mDemoCommandQueued && mUpdateCount != mDemoQueuedSince) // queued across a tick with no claim: the replay has diverged
+ 						{
+-							Shutdown();
+-							return;
++							WriteDemoPlaybackReport("diverged");
++							Sexy::LogError(
++								"Demo playback diverged at update %u: command %d was not consumed.",
++								mUpdateCount, mDemoCmdNum);
++							DoExit(1);
+ 						}
+ 						mDemoQueuedSince = mUpdateCount;
+ 						mDemoCommandQueued = true;
+@@ -2293,6 +2306,48 @@ void SexyAppBase::ProcessDemo()
+ 	}
+ }
+ 
++void SexyAppBase::FinishDemoPlayback()
++{
++	if (mUpdateCount != mDemoExpectedUpdateCount)
++	{
++		WriteDemoPlaybackReport("length_mismatch");
++		Sexy::LogError(
++			"Demo playback ended at update %u; expected update %u.",
++			mUpdateCount, mDemoExpectedUpdateCount);
++		DoExit(1);
++	}
++	WriteDemoPlaybackReport("complete");
++	Sexy::PrintF(
++		"Demo playback completed at update %u.\n",
++		mUpdateCount);
++	Shutdown();
++}
++
++void SexyAppBase::FinishDemoPlaybackAtTarget()
++{
++	WriteDemoPlaybackReport("target_reached");
++	Sexy::PrintF(
++		"Demo playback reached verification target %u.\n",
++		mDemoVerificationTarget);
++	Shutdown();
++}
++
++void SexyAppBase::WriteDemoPlaybackReport(const char* theStatus)
++{
++	if (mDemoReportPath.empty())
++		return;
++
++	std::ofstream aReport(PathFromU8(mDemoReportPath), std::ios::out | std::ios::trunc);
++	aReport
++		<< "{\n"
++		<< "  \"schema_version\": 1,\n"
++		<< "  \"status\": \"" << theStatus << "\",\n"
++		<< "  \"actual_update\": " << mUpdateCount << ",\n"
++		<< "  \"expected_update\": " << mDemoExpectedUpdateCount << ",\n"
++		<< "  \"verification_target\": " << mDemoVerificationTarget << "\n"
++		<< "}\n";
++}
++
+ void SexyAppBase::ShowMemoryUsage()
+ {
+ 	// Memory usage display not implemented
+@@ -2628,7 +2683,10 @@ bool SexyAppBase::Process(bool allowSleep)
+ 			static uint32_t aTick = SDL_GetTicks();
+ 			while (mUpdateCount < mFastForwardToUpdateNum || mFastForwardToMarker)
+ 			{
+-				ClearUpdateBacklog();
++				if (!mDemoBlackout)
++					ClearUpdateBacklog();
++				else
++					mUpdateFTimeAcc = 0.0;
+ 				uint aLastUpdateCount = mUpdateCount;
+ 								
+ 				// Actual updating code below
+@@ -2643,7 +2701,8 @@ bool SexyAppBase::Process(bool allowSleep)
+ 					ProcessSafeDeleteList();
+ 
+ 					// Process any extra updates
+-					while (mPendingUpdatesAcc >= 1.0)
++					while (mPendingUpdatesAcc >= 1.0 &&
++						(mFastForwardToMarker || mUpdateCount < mFastForwardToUpdateNum))
+ 					{						
+ 						// These should just be IDLE commands we have to clear out
+ 						ProcessDemo();												
+@@ -2667,19 +2726,52 @@ bool SexyAppBase::Process(bool allowSleep)
+ 				// If the update count doesn't change, its because we are
+ 				//  playing back a demo and need to read more
+ 				if (aLastUpdateCount == mUpdateCount)
++				{
++					mUpdateAppState = UPDATESTATE_PROCESS_DONE;
+ 					return true;
++				}
+ 
+-				uint32_t aNewTick = SDL_GetTicks();
+-				if (aNewTick - aTick >= 1000 || mFastForwardStep) // let the app draw some
++				if (!mDemoReportPath.empty() &&
++					mUpdateCount >= mDemoReportNextUpdate)
+ 				{
+-					mFastForwardStep = false;
+-					aTick = SDL_GetTicks();
+-					DrawDirtyStuff();			
++					WriteDemoPlaybackReport("running");
++					mDemoReportNextUpdate = mUpdateCount + 1000;
++				}
++
++				if (mDemoBlackout && !mLoadingThreadStarted)
++				{
++					DrawDirtyStuff();
+ 					return true;
+ 				}
++				else if (mDemoBlackout)
++				{
++					if (mFastForwardStep)
++					{
++						mFastForwardStep = false;
++						return true;
++					}
++				}
++				else
++				{
++					uint32_t aNewTick = SDL_GetTicks();
++					if (aNewTick - aTick >= 1000 || mFastForwardStep) // let the app draw some
++					{
++						mFastForwardStep = false;
++						aTick = aNewTick;
++						DrawDirtyStuff();
++						return true;
++					}
++				}
+ 			}
+ 		}
+ 
++		if (mDemoVerificationTarget != 0 &&
++			mUpdateCount >= mDemoVerificationTarget)
++		{
++			FinishDemoPlaybackAtTarget();
++			return true;
++		}
++
+ 		if (mDemoMute)
+ 		{
+ 			mDemoMute = false;
+@@ -2939,7 +3031,11 @@ bool SexyAppBase::UpdateAppStep(bool* updated)
+ 	if (mUpdateAppState == UPDATESTATE_MESSAGES)
+ 	{
+ 		ProcessDemo();
+-		if (!ProcessDeferredMessages(true))
++		const bool isBlackoutFastForward =
++			mPlayingDemoBuffer &&
++			mDemoBlackout &&
++			(mUpdateCount < mFastForwardToUpdateNum || mFastForwardToMarker);
++		if (isBlackoutFastForward || !ProcessDeferredMessages(true))
+ 		{			
+ 			mUpdateAppState = UPDATESTATE_PROCESS_1;
+ 		}
+@@ -3049,7 +3145,8 @@ void SexyAppBase::Start()
+ 
+ 	WaitForLoadingThread();
+ 
+-	Sexy::PrintF("Seconds       = %g\r\n", (SDL_GetTicks() - aStartTime) / 1000.0);
++	uint32_t anElapsedTime = SDL_GetTicks() - aStartTime;
++	Sexy::PrintF("Seconds       = %g\r\n", anElapsedTime / 1000.0);
+ 	//Sexy::PrintF("Count         = %d\r\n", aCount);
+ 	Sexy::PrintF("Sleep Count   = %u\r\n", mSleepCount);
+ 	Sexy::PrintF("Update Count  = %u\r\n", mUpdateCount);
+@@ -3060,6 +3157,10 @@ void SexyAppBase::Start()
+ 	{
+ 		Sexy::PrintF("Avg FPS       = %" PRIu64 "\r\n", static_cast<uint64_t>(mDrawCount) * 1000 / (mDrawTime+mScreenBltTime));
+ 	}
++	if (anElapsedTime > 0)
++	{
++		Sexy::PrintF("Presented FPS = %.1f\r\n", (mDrawCount * 1000.0) / anElapsedTime);
++	}
+ 
+ 	//timeEndPeriod(1);	
+ 
+@@ -3295,7 +3396,7 @@ static std::string GetTimestampedDemoFileName(std::string_view theDemoPrefix)
+ static bool ParamTakesValue(std::string_view theParamName)
+ {
+ 	static constexpr std::string_view kValueParams[] = {
+-		"-play", "-playnum", "-record", "-recnum", "-resdir", "-savedir",
++		"-demo-report", "-play", "-play-to", "-playnum", "-record", "-recnum", "-resdir", "-savedir", "-teacher-session-dir",
+ 	};
+ 	return std::ranges::find(kValueParams, theParamName) != std::end(kValueParams);
+ }
+@@ -3408,6 +3509,56 @@ void SexyAppBase::HandleCmdLineParam(std::string_view theParamName, std::string_
+ 	{
+ 		mCustomSaveDir = std::string(theParamValue);
+ 	}
++	else if (theParamName == "-windowed")
++	{
++		mStartupWindowMode = 1;
++	}
++	else if (theParamName == "-fullscreen")
++	{
++		mStartupWindowMode = 0;
++	}
++	else if (theParamName == "-native-resolution")
++	{
++		mNativeWindowResolution = true;
++	}
++	else if (theParamName == "-play-to-end")
++	{
++		mDemoVerificationTarget = 0;
++		mFastForwardToUpdateNum = std::numeric_limits<uint>::max();
++		if (!mTitle.ends_with(" - Demo Replay"))
++			mTitle += " - Demo Replay";
++	}
++	else if (theParamName == "-play-to")
++	{
++		uint aTarget = 0;
++		auto [anEnd, anError] = std::from_chars(
++			theParamValue.data(),
++			theParamValue.data() + theParamValue.size(),
++			aTarget);
++		if (anError != std::errc() ||
++			anEnd != theParamValue.data() + theParamValue.size() ||
++			aTarget == 0)
++		{
++			Popup("Invalid demo verification update.");
++			DoExit(1);
++		}
++		mDemoVerificationTarget = aTarget;
++		mFastForwardToUpdateNum = aTarget;
++		if (!mTitle.ends_with(" - Demo Replay"))
++			mTitle += " - Demo Replay";
++	}
++	else if (theParamName == "-demo-blackout")
++	{
++		mDemoBlackout = true;
++	}
++	else if (theParamName == "-demo-hidden")
++	{
++		mDemoHidden = true;
++	}
++	else if (theParamName == "-demo-report")
++	{
++		mDemoReportPath = std::string(theParamValue);
++	}
+ 	else
+ 	{
+ 		Popup(GetString("INVALID_COMMANDLINE_PARAM", "Invalid command line parameter: ").append(theParamName));
+@@ -3535,6 +3686,11 @@ void SexyAppBase::Init()
+ 
+ 	ReadFromRegistry();	
+ 
++#if !defined(__IPHONEOS__) && (!defined(__ANDROID__) || defined(__TERMUX__)) && !defined(__SWITCH__) && !defined(__3DS__) && !defined(__EMSCRIPTEN__)
++	if (mStartupWindowMode >= 0)
++		mIsWindowed = mStartupWindowMode != 0;
++#endif
++
+ 	if (!mPlayingDemoBuffer) // demo playback restores mRandSeed from the demo file
+ 	{
+ 		mRandSeed = SDL_GetTicks();
+@@ -3603,6 +3759,8 @@ void SexyAppBase::Init()
+ 	InitInput();
+ 
+ 	mInitialized = true;
++	if (mPlayingDemoBuffer)
++		WriteDemoPlaybackReport("initializing");
+ }
+ 
+ void SexyAppBase::HandleGameAlreadyRunning()
+diff --git a/src/SexyAppFramework/SexyAppBase.h b/src/SexyAppFramework/SexyAppBase.h
+index 97e7ced..24c292c 100644
+--- a/src/SexyAppFramework/SexyAppBase.h
++++ b/src/SexyAppFramework/SexyAppBase.h
+@@ -199,6 +199,8 @@ public:
+ 	bool					mFullScreenWindow; // uses ChangeDisplaySettings to run fullscreen with mIsWindowed true
+ 	bool					mForceFullscreen;
+ 	bool					mForceWindowed;	
++	bool					mNativeWindowResolution;
++	int						mStartupWindowMode; // -1: saved/default, 0: fullscreen, 1: windowed
+ 	bool					mInitialized;	
+ 	bool					mProcessInTimer;
+ 	uint32_t				mTimeLoaded;
+@@ -301,6 +303,12 @@ public:
+ 	bool					mHasCustomDemoFile; // an explicit file argument overrides automatic demo file selection
+ 	uint					mDemoRecordFileLimit;
+ 	size_t					mDemoPlayIndex; // -playnum: index into the timestamp/name-ordered recording list
++	uint					mDemoExpectedUpdateCount;
++	uint					mDemoVerificationTarget;
++	uint					mDemoReportNextUpdate;
++	bool					mDemoBlackout;
++	bool					mDemoHidden;
++	std::string				mDemoReportPath;
+ 	Buffer					mDemoBuffer;
+ 	int						mLastDemoMouseX;
+ 	int						mLastDemoMouseY;
+@@ -394,6 +402,9 @@ protected:
+ 
+ 	// Demo recording helpers	
+ 	void					ProcessDemo();
++	void					FinishDemoPlayback();
++	void					FinishDemoPlaybackAtTarget();
++	void					WriteDemoPlaybackReport(const char* theStatus);
+ 	inline bool				IsOnPrimaryThread() const { return std::this_thread::get_id() == mPrimaryThreadId; } // demo-synced IO is primary-thread only
+ 
+ public:
+diff --git a/src/SexyAppFramework/graphics/GLInterface.h b/src/SexyAppFramework/graphics/GLInterface.h
+index a740a12..492261d 100644
+--- a/src/SexyAppFramework/graphics/GLInterface.h
++++ b/src/SexyAppFramework/graphics/GLInterface.h
+@@ -28,7 +28,13 @@
+ #include <mutex>
+ #include <set>
+ #include "Common.h"
++#if defined(PVZ_MACOS_METAL)
++struct SDL_Texture;
++using SexyRenderTexture = SDL_Texture*;
++#else
+ #include "graphics/GLPlatform.h"
++using SexyRenderTexture = GLuint;
++#endif
+ #include "graphics/MemoryImage.h"
+ #include "graphics/NativeDisplay.h"
+ #include "misc/Rect.h"
+@@ -57,7 +63,7 @@ enum RenderImageFlags
+ 
+ struct TextureDataPiece
+ {
+-	GLuint mTexture;
++	SexyRenderTexture mTexture;
+ 	int mWidth,mHeight;
+ };
+ 
+@@ -158,6 +164,9 @@ public:
+ 	float mMaxTotalU, mMaxTotalV;
+ 	PixelFormat mPixelFormat;
+ 	int mImageFlags;
++#if defined(PVZ_MACOS_METAL)
++	std::vector<uint32_t> mCpuBits;
++#endif
+ 
+ 	TextureData();
+ 	~TextureData();
+@@ -167,8 +176,8 @@ public:
+ 	void CreateTextureDimensions(MemoryImage *theImage);
+ 	void CreateTextures(MemoryImage *theImage);
+ 	void CheckCreateTextures(MemoryImage *theImage);
+-	GLuint& GetTexture(int x, int y, int &width, int &height, float &u1, float &v1, float &u2, float &v2, float *uvBounds);
+-	GLuint& GetTextureF(float x, float y, float &width, float &height, float &u1, float &v1, float &u2, float &v2, float *uvBounds);
++	SexyRenderTexture& GetTexture(int x, int y, int &width, int &height, float &u1, float &v1, float &u2, float &v2, float *uvBounds);
++	SexyRenderTexture& GetTextureF(float x, float y, float &width, float &height, float &u1, float &v1, float &u2, float &v2, float *uvBounds);
+ 
+ 	void Blt(float theX, float theY, const Rect& theSrcRect, const Color& theColor);
+ 	void BltTransformed(const SexyMatrix3 &theTrans, const Rect& theSrcRect, const Color& theColor, const Rect *theClipRect = nullptr, float theX = 0, float theY = 0, bool center = false);	
+diff --git a/src/SexyAppFramework/graphics/MetalInterface.cpp b/src/SexyAppFramework/graphics/MetalInterface.cpp
+new file mode 100644
+index 0000000..4317903
+--- /dev/null
++++ b/src/SexyAppFramework/graphics/MetalInterface.cpp
+@@ -0,0 +1,1393 @@
++/*
++ * Portions of this file are based on the PopCap Games Framework
++ * Copyright (C) 2005-2009 PopCap Games, Inc.
++ *
++ * Copyright (C) 2026 Zhou Qiankang <wszqkzqk@qq.com>
++ *
++ * SPDX-License-Identifier: LGPL-3.0-or-later AND LicenseRef-PopCap
++ *
++ * macOS renderer implemented with SDL's native Metal driver.
++ */
++
++#include <SDL.h>
++
++#include "graphics/GLInterface.h"
++#include "graphics/GLImage.h"
++#include "graphics/Graphics.h"
++#include "graphics/MemoryImage.h"
++#include "graphics/TriVertex.h"
++#include "SexyAppBase.h"
++
++#include <algorithm>
++#include <cmath>
++#include <cstring>
++#include <functional>
++#include <limits>
++#include <mutex>
++#include <vector>
++
++using namespace Sexy;
++
++namespace
++{
++
++SDL_Renderer* gRenderer = nullptr;
++SDL_BlendMode gBlendMode = SDL_BLENDMODE_BLEND;
++SDL_BlendMode gNormalBlendMode = SDL_BLENDMODE_BLEND;
++SDL_BlendMode gAdditiveBlendMode = SDL_BLENDMODE_ADD;
++bool gLinearFilter = false;
++int gMaxTextureWidth = 4096;
++int gMaxTextureHeight = 4096;
++bool gReportedGeometryError = false;
++// SDL rendering is confined to the main thread. Retaining these buffers avoids
++// heap traffic for every sprite/triangle submission and every texture tile.
++std::vector<SDL_Vertex> gGeometryVertices;
++std::vector<GLVertex> gTriangleVertices;
++std::vector<Uint8> gTextureUploadPixels;
++
++SDL_Color UnpackColor(uint32_t color)
++{
++	return SDL_Color{
++		static_cast<Uint8>(color & 0xff),
++		static_cast<Uint8>((color >> 8) & 0xff),
++		static_cast<Uint8>((color >> 16) & 0xff),
++		static_cast<Uint8>((color >> 24) & 0xff)
++	};
++}
++
++uint32_t VertexColor(uint32_t vertexColor, uint32_t fallback)
++{
++	return vertexColor ? ToLE32(
++		((vertexColor >> 16) & 0x000000ffu)
++		| (vertexColor & 0xff00ff00u)
++		| ((vertexColor << 16) & 0x00ff0000u))
++		: fallback;
++}
++
++void ConfigureTexture(SDL_Texture* texture)
++{
++	if (!texture)
++		return;
++	SDL_SetTextureBlendMode(texture, gBlendMode);
++	SDL_SetTextureScaleMode(
++		texture,
++		gLinearFilter ? SDL_ScaleModeLinear : SDL_ScaleModeNearest);
++}
++
++enum class Primitive
++{
++	Triangles,
++	TriangleStrip,
++	TriangleFan
++};
++
++void RenderVertices(
++	SDL_Texture* texture,
++	const GLVertex* vertices,
++	int vertexCount,
++	Primitive primitive)
++{
++	if (!gRenderer || !vertices || vertexCount < 3)
++		return;
++
++	gGeometryVertices.clear();
++	auto append = [&](const GLVertex& source)
++	{
++		SDL_Vertex vertex{};
++		vertex.position.x = source.sx;
++		vertex.position.y = source.sy;
++		vertex.color = UnpackColor(source.color);
++		vertex.tex_coord.x = source.tu;
++		vertex.tex_coord.y = source.tv;
++		gGeometryVertices.push_back(vertex);
++	};
++
++	switch (primitive)
++	{
++	case Primitive::Triangles:
++		gGeometryVertices.reserve(static_cast<size_t>(vertexCount));
++		for (int i = 0; i + 2 < vertexCount; i += 3)
++		{
++			append(vertices[i]);
++			append(vertices[i + 1]);
++			append(vertices[i + 2]);
++		}
++		break;
++	case Primitive::TriangleStrip:
++		gGeometryVertices.reserve(
++			static_cast<size_t>(vertexCount - 2) * 3);
++		for (int i = 0; i + 2 < vertexCount; ++i)
++		{
++			if ((i & 1) == 0)
++			{
++				append(vertices[i]);
++				append(vertices[i + 1]);
++			}
++			else
++			{
++				append(vertices[i + 1]);
++				append(vertices[i]);
++			}
++			append(vertices[i + 2]);
++		}
++		break;
++	case Primitive::TriangleFan:
++		gGeometryVertices.reserve(
++			static_cast<size_t>(vertexCount - 2) * 3);
++		for (int i = 1; i + 1 < vertexCount; ++i)
++		{
++			append(vertices[0]);
++			append(vertices[i]);
++			append(vertices[i + 1]);
++		}
++		break;
++	}
++
++	ConfigureTexture(texture);
++	if (SDL_RenderGeometry(
++			gRenderer,
++			texture,
++			gGeometryVertices.data(),
++			static_cast<int>(gGeometryVertices.size()),
++			nullptr,
++			0) != 0
++		&& !gReportedGeometryError)
++	{
++		gReportedGeometryError = true;
++		Sexy::LogError("Metal geometry submission failed: %s", SDL_GetError());
++	}
++}
++
++void RenderVertices(
++	SDL_Texture* texture,
++	const VertexList& vertices,
++	Primitive primitive)
++{
++	RenderVertices(texture, vertices.mVerts, vertices.mSize, primitive);
++}
++
++class ScopedClipRect
++{
++public:
++	explicit ScopedClipRect(const Rect* clip)
++	{
++		if (clip)
++		{
++			SDL_Rect rect{clip->mX, clip->mY, clip->mWidth, clip->mHeight};
++			SDL_RenderSetClipRect(gRenderer, &rect);
++		}
++	}
++
++	~ScopedClipRect()
++	{
++		SDL_RenderSetClipRect(gRenderer, nullptr);
++	}
++};
++
++float GetCoord(const GLVertex& vertex, int component)
++{
++	switch (component)
++	{
++	case 0: return vertex.sx;
++	case 1: return vertex.sy;
++	case 2: return vertex.sz;
++	case 3: return vertex.tu;
++	case 4: return vertex.tv;
++	default: return 0.0f;
++	}
++}
++
++GLVertex Interpolate(const GLVertex& a, const GLVertex& b, float t)
++{
++	GLVertex result = a;
++	result.sx = a.sx + t * (b.sx - a.sx);
++	result.sy = a.sy + t * (b.sy - a.sy);
++	result.tu = a.tu + t * (b.tu - a.tu);
++	result.tv = a.tv + t * (b.tv - a.tv);
++	if (a.color != b.color)
++	{
++		auto lerp = [&](int shift)
++		{
++			return static_cast<int>(
++				((a.color >> shift) & 0xff)
++				+ t * (
++					static_cast<int>((b.color >> shift) & 0xff)
++					- static_cast<int>((a.color >> shift) & 0xff)));
++		};
++		result.color = static_cast<uint32_t>(
++			lerp(0)
++			| (lerp(8) << 8)
++			| (lerp(16) << 16)
++			| (lerp(24) << 24));
++	}
++	return result;
++}
++
++template<class Predicate>
++struct PointClipper
++{
++	Predicate mPredicate;
++
++	void ClipPoint(
++		int component,
++		float clipValue,
++		const GLVertex& first,
++		const GLVertex& second,
++		VertexList& output)
++	{
++		bool firstOutside = mPredicate(GetCoord(first, component), clipValue);
++		bool secondOutside = mPredicate(GetCoord(second, component), clipValue);
++		if (!firstOutside)
++		{
++			if (!secondOutside)
++				output.push_back(second);
++			else
++				output.push_back(Interpolate(
++					first,
++					second,
++					(clipValue - GetCoord(first, component))
++						/ (GetCoord(second, component) - GetCoord(first, component))));
++		}
++		else if (!secondOutside)
++		{
++			output.push_back(Interpolate(
++				first,
++				second,
++				(clipValue - GetCoord(first, component))
++					/ (GetCoord(second, component) - GetCoord(first, component))));
++			output.push_back(second);
++		}
++	}
++
++	void ClipPoints(
++		int component,
++		float clipValue,
++		VertexList& input,
++		VertexList& output)
++	{
++		if (input.size() < 2)
++			return;
++		ClipPoint(component, clipValue, input[input.size() - 1], input[0], output);
++		for (int i = 0; i < input.size() - 1; ++i)
++			ClipPoint(component, clipValue, input[i], input[i + 1], output);
++	}
++};
++
++void ClipTextureCoordinates(VertexList& vertices)
++{
++	VertexList scratch;
++	VertexList* input = &vertices;
++	VertexList* output = &scratch;
++	PointClipper<std::less<float>> less;
++	PointClipper<std::greater_equal<float>> greaterEqual;
++
++	less.ClipPoints(3, 0, *input, *output);
++	std::swap(input, output);
++	output->clear();
++	less.ClipPoints(4, 0, *input, *output);
++	std::swap(input, output);
++	output->clear();
++	greaterEqual.ClipPoints(3, 1, *input, *output);
++	std::swap(input, output);
++	output->clear();
++	greaterEqual.ClipPoints(4, 1, *input, *output);
++
++	vertices = *output;
++}
++
++void UploadTexturePixels(
++	SDL_Texture* texture,
++	MemoryImage* image,
++	int offsetX,
++	int offsetY,
++	int width,
++	int height)
++{
++	gTextureUploadPixels.resize(static_cast<size_t>(width) * height * 4);
++	const auto* colorIndices =
++		static_cast<const uint8_t*>(image->mColorIndices);
++	const uint32_t* colorTable = image->mColorTable;
++	const uint32_t* sourceBits = colorTable ? nullptr : image->GetBits();
++	const int sourceWidth = image->GetWidth();
++	for (int y = 0; y < height; ++y)
++	{
++		for (int x = 0; x < width; ++x)
++		{
++			uint32_t argb;
++			if (colorTable)
++			{
++				argb = colorTable[
++					colorIndices[
++						(offsetY + y) * sourceWidth + offsetX + x]];
++			}
++			else
++			{
++				argb = sourceBits[
++					(offsetY + y) * sourceWidth + offsetX + x];
++			}
++
++			size_t destination = (static_cast<size_t>(y) * width + x) * 4;
++			gTextureUploadPixels[destination] =
++				static_cast<Uint8>((argb >> 16) & 0xff);
++			gTextureUploadPixels[destination + 1] =
++				static_cast<Uint8>((argb >> 8) & 0xff);
++			gTextureUploadPixels[destination + 2] =
++				static_cast<Uint8>(argb & 0xff);
++			gTextureUploadPixels[destination + 3] =
++				static_cast<Uint8>((argb >> 24) & 0xff);
++		}
++	}
++	SDL_UpdateTexture(
++		texture,
++		nullptr,
++		gTextureUploadPixels.data(),
++		width * 4);
++}
++
++} // namespace
++
++TextureData::TextureData()
++	: mWidth(0),
++	  mHeight(0),
++	  mTexVecWidth(0),
++	  mTexVecHeight(0),
++	  mBitsChangedCount(0),
++	  mTexMemSize(0),
++	  mMaxTotalU(0),
++	  mMaxTotalV(0),
++	  mPixelFormat(PixelFormat_Unknown),
++	  mImageFlags(0)
++{
++	mTexPieceWidth = 64;
++	mTexPieceHeight = 64;
++}
++
++TextureData::~TextureData()
++{
++	ReleaseTextures();
++}
++
++void TextureData::ReleaseTextures()
++{
++	for (auto& piece : mTextures)
++	{
++		if (piece.mTexture)
++			SDL_DestroyTexture(piece.mTexture);
++		piece.mTexture = nullptr;
++	}
++	mTextures.clear();
++	mTexMemSize = 0;
++}
++
++void TextureData::CreateTextureDimensions(MemoryImage* image)
++{
++	mTexPieceWidth = std::max(1, std::min(image->GetWidth(), gMaxTextureWidth));
++	mTexPieceHeight = std::max(1, std::min(image->GetHeight(), gMaxTextureHeight));
++	mTexVecWidth = (image->GetWidth() + mTexPieceWidth - 1) / mTexPieceWidth;
++	mTexVecHeight = (image->GetHeight() + mTexPieceHeight - 1) / mTexPieceHeight;
++	mTextures.resize(static_cast<size_t>(mTexVecWidth) * mTexVecHeight);
++
++	for (int row = 0; row < mTexVecHeight; ++row)
++	{
++		for (int column = 0; column < mTexVecWidth; ++column)
++		{
++			TextureDataPiece& piece = mTextures[row * mTexVecWidth + column];
++			piece.mTexture = nullptr;
++			piece.mWidth = std::min(
++				mTexPieceWidth,
++				image->GetWidth() - column * mTexPieceWidth);
++			piece.mHeight = std::min(
++				mTexPieceHeight,
++				image->GetHeight() - row * mTexPieceHeight);
++		}
++	}
++
++	mMaxTotalU = image->GetWidth() / static_cast<float>(mTexPieceWidth);
++	mMaxTotalV = image->GetHeight() / static_cast<float>(mTexPieceHeight);
++}
++
++void TextureData::CreateTextures(MemoryImage* image)
++{
++	image->DeleteSWBuffers();
++	image->CommitBits();
++
++	bool recreate =
++		mWidth != image->mWidth
++		|| mHeight != image->mHeight
++		|| (image->mRenderFlags & RenderImageFlag_TextureMask) != mImageFlags
++		|| mTextures.empty();
++	if (recreate)
++	{
++		ReleaseTextures();
++		mImageFlags = image->mRenderFlags & RenderImageFlag_TextureMask;
++		CreateTextureDimensions(image);
++	}
++
++	const uint32_t* sourceBits = image->GetBits();
++	mCpuBits.assign(
++		sourceBits,
++		sourceBits + static_cast<size_t>(image->GetWidth()) * image->GetHeight());
++
++	for (int row = 0; row < mTexVecHeight; ++row)
++	{
++		for (int column = 0; column < mTexVecWidth; ++column)
++		{
++			TextureDataPiece& piece = mTextures[row * mTexVecWidth + column];
++			if (!piece.mTexture)
++			{
++				piece.mTexture = SDL_CreateTexture(
++					gRenderer,
++					SDL_PIXELFORMAT_RGBA32,
++					SDL_TEXTUREACCESS_STATIC,
++					piece.mWidth,
++					piece.mHeight);
++				if (!piece.mTexture)
++				continue;
++				mTexMemSize += piece.mWidth * piece.mHeight * 4;
++			}
++			UploadTexturePixels(
++				piece.mTexture,
++				image,
++				column * mTexPieceWidth,
++				row * mTexPieceHeight,
++				piece.mWidth,
++				piece.mHeight);
++		}
++	}
++
++	mWidth = image->mWidth;
++	mHeight = image->mHeight;
++	mBitsChangedCount = image->mBitsChangedCount;
++	mPixelFormat = PixelFormat_A8R8G8B8;
++}
++
++void TextureData::CheckCreateTextures(MemoryImage* image)
++{
++	if (mPixelFormat == PixelFormat_Unknown
++		|| image->mWidth != mWidth
++		|| image->mHeight != mHeight
++		|| image->mBitsChangedCount != mBitsChangedCount
++		|| (image->mRenderFlags & RenderImageFlag_TextureMask) != mImageFlags)
++	{
++		CreateTextures(image);
++	}
++}
++
++SexyRenderTexture& TextureData::GetTexture(
++	int x,
++	int y,
++	int& width,
++	int& height,
++	float& u1,
++	float& v1,
++	float& u2,
++	float& v2,
++	float* uvBounds)
++{
++	int textureX = x / mTexPieceWidth;
++	int textureY = y / mTexPieceHeight;
++	TextureDataPiece& piece = mTextures[textureY * mTexVecWidth + textureX];
++	int left = x % mTexPieceWidth;
++	int top = y % mTexPieceHeight;
++	int right = std::min(left + width, piece.mWidth);
++	int bottom = std::min(top + height, piece.mHeight);
++	width = right - left;
++	height = bottom - top;
++	u1 = left / static_cast<float>(piece.mWidth);
++	v1 = top / static_cast<float>(piece.mHeight);
++	u2 = right / static_cast<float>(piece.mWidth);
++	v2 = bottom / static_cast<float>(piece.mHeight);
++	if (uvBounds)
++	{
++		uvBounds[0] = u1;
++		uvBounds[1] = v1;
++		uvBounds[2] = u2;
++		uvBounds[3] = v2;
++	}
++	return piece.mTexture;
++}
++
++SexyRenderTexture& TextureData::GetTextureF(
++	float x,
++	float y,
++	float& width,
++	float& height,
++	float& u1,
++	float& v1,
++	float& u2,
++	float& v2,
++	float* uvBounds)
++{
++	int textureX = static_cast<int>(x / mTexPieceWidth);
++	int textureY = static_cast<int>(y / mTexPieceHeight);
++	TextureDataPiece& piece = mTextures[textureY * mTexVecWidth + textureX];
++	float left = x - textureX * mTexPieceWidth;
++	float top = y - textureY * mTexPieceHeight;
++	float right = std::min(left + width, static_cast<float>(piece.mWidth));
++	float bottom = std::min(top + height, static_cast<float>(piece.mHeight));
++	width = right - left;
++	height = bottom - top;
++	u1 = left / piece.mWidth;
++	v1 = top / piece.mHeight;
++	u2 = right / piece.mWidth;
++	v2 = bottom / piece.mHeight;
++	if (uvBounds)
++	{
++		uvBounds[0] = u1;
++		uvBounds[1] = v1;
++		uvBounds[2] = u2;
++		uvBounds[3] = v2;
++	}
++	return piece.mTexture;
++}
++
++void TextureData::Blt(
++	float destinationX,
++	float destinationY,
++	const Rect& sourceRect,
++	const Color& color)
++{
++	int sourceRight = sourceRect.mX + sourceRect.mWidth;
++	int sourceBottom = sourceRect.mY + sourceRect.mHeight;
++	uint32_t packedColor = color.ToGLColor();
++
++	float y = destinationY;
++	for (int sourceY = sourceRect.mY; sourceY < sourceBottom;)
++	{
++		float x = destinationX;
++		int rowHeight = sourceBottom - sourceY;
++		for (int sourceX = sourceRect.mX; sourceX < sourceRight;)
++		{
++			int width = sourceRight - sourceX;
++			int height = rowHeight;
++			float u1, v1, u2, v2;
++			float uvBounds[4];
++			SDL_Texture* texture = GetTexture(
++				sourceX,
++				sourceY,
++				width,
++				height,
++				u1,
++				v1,
++				u2,
++				v2,
++				uvBounds);
++			GLVertex vertices[4] = {
++				{x, y, 0, packedColor, u1, v1},
++				{x, y + height, 0, packedColor, u1, v2},
++				{x + width, y, 0, packedColor, u2, v1},
++				{x + width, y + height, 0, packedColor, u2, v2}
++			};
++			RenderVertices(texture, vertices, 4, Primitive::TriangleStrip);
++			sourceX += width;
++			x += width;
++			rowHeight = height;
++		}
++		sourceY += rowHeight;
++		y += rowHeight;
++	}
++}
++
++void TextureData::BltTransformed(
++	const SexyMatrix3& transform,
++	const Rect& sourceRect,
++	const Color& color,
++	const Rect* clipRect,
++	float destinationX,
++	float destinationY,
++	bool center)
++{
++	int sourceRight = sourceRect.mX + sourceRect.mWidth;
++	int sourceBottom = sourceRect.mY + sourceRect.mHeight;
++	float startX = center ? -sourceRect.mWidth / 2.0f : 0.0f;
++	float startY = center ? -sourceRect.mHeight / 2.0f : 0.0f;
++	uint32_t packedColor = color.ToGLColor();
++	ScopedClipRect clip(clipRect);
++
++	float y = startY;
++	for (int sourceY = sourceRect.mY; sourceY < sourceBottom;)
++	{
++		float x = startX;
++		int rowHeight = sourceBottom - sourceY;
++		for (int sourceX = sourceRect.mX; sourceX < sourceRight;)
++		{
++			int width = sourceRight - sourceX;
++			int height = rowHeight;
++			float u1, v1, u2, v2;
++			float uvBounds[4];
++			SDL_Texture* texture = GetTexture(
++				sourceX,
++				sourceY,
++				width,
++				height,
++				u1,
++				v1,
++				u2,
++				v2,
++				uvBounds);
++			SexyVector2 points[4] = {
++				{x, y},
++				{x, y + height},
++				{x + width, y},
++				{x + width, y + height}
++			};
++			for (auto& point : points)
++			{
++				point = transform * point;
++				point.x += destinationX;
++				point.y += destinationY;
++			}
++			GLVertex vertices[4] = {
++				{points[0].x, points[0].y, 0, packedColor, u1, v1},
++				{points[1].x, points[1].y, 0, packedColor, u1, v2},
++				{points[2].x, points[2].y, 0, packedColor, u2, v1},
++				{points[3].x, points[3].y, 0, packedColor, u2, v2}
++			};
++			RenderVertices(texture, vertices, 4, Primitive::TriangleStrip);
++			sourceX += width;
++			x += width;
++			rowHeight = height;
++		}
++		sourceY += rowHeight;
++		y += rowHeight;
++	}
++}
++
++void TextureData::BltTriangles(
++	const TriVertex vertices[][3],
++	int triangleCount,
++	unsigned int color,
++	float translateX,
++	float translateY,
++	bool clampUv)
++{
++	if (triangleCount <= 0 || mTextures.empty())
++		return;
++
++	bool repeat = !clampUv;
++	bool singleTexture = mTexVecWidth == 1 && mTexVecHeight == 1;
++	if (singleTexture && !repeat)
++	{
++		gTriangleVertices.resize(static_cast<size_t>(triangleCount) * 3);
++		for (int triangle = 0; triangle < triangleCount; ++triangle)
++		{
++			for (int index = 0; index < 3; ++index)
++			{
++				const TriVertex& source = vertices[triangle][index];
++				gTriangleVertices[triangle * 3 + index] = {
++					source.x + translateX,
++					source.y + translateY,
++					0,
++					VertexColor(source.color, color),
++					source.u * mMaxTotalU,
++					source.v * mMaxTotalV
++				};
++			}
++		}
++		RenderVertices(
++			mTextures[0].mTexture,
++			gTriangleVertices.data(),
++			static_cast<int>(gTriangleVertices.size()),
++			Primitive::Triangles);
++		return;
++	}
++
++	for (int triangle = 0; triangle < triangleCount; ++triangle)
++	{
++		VertexList master;
++		for (int index = 0; index < 3; ++index)
++		{
++			const TriVertex& source = vertices[triangle][index];
++			master.push_back({
++				source.x + translateX,
++				source.y + translateY,
++				0,
++				VertexColor(source.color, color),
++				source.u * mMaxTotalU,
++				source.v * mMaxTotalV
++			});
++		}
++
++		float minimumU = std::numeric_limits<float>::max();
++		float minimumV = std::numeric_limits<float>::max();
++		float maximumU = std::numeric_limits<float>::lowest();
++		float maximumV = std::numeric_limits<float>::lowest();
++		for (int index = 0; index < 3; ++index)
++		{
++			minimumU = std::min(minimumU, master[index].tu);
++			minimumV = std::min(minimumV, master[index].tv);
++			maximumU = std::max(maximumU, master[index].tu);
++			maximumV = std::max(maximumV, master[index].tv);
++		}
++
++		int left = static_cast<int>(std::floor(minimumU));
++		int top = static_cast<int>(std::floor(minimumV));
++		int right = static_cast<int>(std::ceil(maximumU));
++		int bottom = static_cast<int>(std::ceil(maximumV));
++		if (!repeat)
++		{
++			left = std::max(0, left);
++			top = std::max(0, top);
++			right = std::min(mTexVecWidth, right);
++			bottom = std::min(mTexVecHeight, bottom);
++		}
++
++		for (int textureY = top; textureY < bottom; ++textureY)
++		{
++			for (int textureX = left; textureX < right; ++textureX)
++			{
++				int sourceTextureX = repeat ? 0 : textureX;
++				int sourceTextureY = repeat ? 0 : textureY;
++				if (sourceTextureX < 0 || sourceTextureX >= mTexVecWidth
++					|| sourceTextureY < 0 || sourceTextureY >= mTexVecHeight)
++					continue;
++
++				TextureDataPiece& piece =
++					mTextures[sourceTextureY * mTexVecWidth + sourceTextureX];
++				VertexList clipped = master;
++				for (int index = 0; index < clipped.size(); ++index)
++				{
++					clipped[index].tu -= textureX;
++					clipped[index].tv -= textureY;
++					if (!repeat)
++					{
++						clipped[index].tu *=
++							static_cast<float>(mTexPieceWidth) / piece.mWidth;
++						clipped[index].tv *=
++							static_cast<float>(mTexPieceHeight) / piece.mHeight;
++					}
++				}
++				ClipTextureCoordinates(clipped);
++				if (clipped.size() >= 3)
++				{
++					RenderVertices(
++						piece.mTexture,
++						clipped,
++						Primitive::TriangleFan);
++				}
++			}
++		}
++	}
++}
++
++GLInterface::GLInterface(SexyAppBase* app)
++{
++	mApp = app;
++	mWidth = app->mWidth;
++	mHeight = app->mHeight;
++	mDisplayWidth = mWidth;
++	mDisplayHeight = mHeight;
++	mPresentationRect = Rect(0, 0, mWidth, mHeight);
++	mRefreshRate = 60;
++	mMillisecondsPerFrame = 1000 / mRefreshRate;
++	mScreenImage = nullptr;
++	mNextCursorX = 0;
++	mNextCursorY = 0;
++	mCursorX = 0;
++	mCursorY = 0;
++}
++
++GLInterface::~GLInterface()
++{
++	delete mScreenImage;
++	mScreenImage = nullptr;
++	for (auto* image : mImageSet)
++	{
++		delete static_cast<TextureData*>(image->mRenderData);
++		image->mRenderData = nullptr;
++	}
++	mImageSet.clear();
++	if (gRenderer)
++	{
++		SDL_DestroyRenderer(gRenderer);
++		gRenderer = nullptr;
++		mApp->mContext = nullptr;
++	}
++}
++
++void GLInterface::SetDrawMode(int drawMode)
++{
++	gBlendMode =
++		drawMode == Graphics::DRAWMODE_NORMAL
++		? gNormalBlendMode
++		: gAdditiveBlendMode;
++	SDL_SetRenderDrawBlendMode(gRenderer, gBlendMode);
++}
++
++void GLInterface::AddGLImage(GLImage* image)
++{
++	std::scoped_lock lock(mCritSect);
++	mGLImageSet.insert(image);
++}
++
++void GLInterface::RemoveGLImage(GLImage* image)
++{
++	std::scoped_lock lock(mCritSect);
++	mGLImageSet.erase(image);
++}
++
++void GLInterface::Remove3DData(MemoryImage* image)
++{
++	if (!image->mRenderData)
++		return;
++	delete static_cast<TextureData*>(image->mRenderData);
++	image->mRenderData = nullptr;
++	std::scoped_lock lock(mCritSect);
++	mImageSet.erase(image);
++}
++
++GLImage* GLInterface::GetScreenImage()
++{
++	return mScreenImage;
++}
++
++void GLInterface::UpdateViewport()
++{
++	if (!gRenderer)
++		return;
++	SDL_RenderSetLogicalSize(gRenderer, mWidth, mHeight);
++	// SDL remaps pointer events into logical coordinates when logical sizing is
++	// active, so WidgetManager must receive the same logical source rectangle.
++	mPresentationRect = Rect(0, 0, mWidth, mHeight);
++}
++
++int GLInterface::Init(bool)
++{
++	gRenderer = static_cast<SDL_Renderer*>(mApp->mContext);
++	if (!gRenderer)
++		return 0;
++
++	SDL_RendererInfo info{};
++	if (SDL_GetRendererInfo(gRenderer, &info) != 0
++		|| !info.name
++		|| std::strcmp(info.name, "metal") != 0)
++	{
++		Sexy::LogError("The playable macOS build did not acquire the Metal renderer.");
++		return 0;
++	}
++
++	gMaxTextureWidth =
++		info.max_texture_width > 0 ? info.max_texture_width : 4096;
++	gMaxTextureHeight =
++		info.max_texture_height > 0 ? info.max_texture_height : 4096;
++	gNormalBlendMode = SDL_ComposeCustomBlendMode(
++		SDL_BLENDFACTOR_SRC_ALPHA,
++		SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
++		SDL_BLENDOPERATION_ADD,
++		SDL_BLENDFACTOR_SRC_ALPHA,
++		SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
++		SDL_BLENDOPERATION_ADD);
++	gAdditiveBlendMode = SDL_ComposeCustomBlendMode(
++		SDL_BLENDFACTOR_SRC_ALPHA,
++		SDL_BLENDFACTOR_ONE,
++		SDL_BLENDOPERATION_ADD,
++		SDL_BLENDFACTOR_SRC_ALPHA,
++		SDL_BLENDFACTOR_ONE,
++		SDL_BLENDOPERATION_ADD);
++	gBlendMode = gNormalBlendMode;
++	SDL_SetRenderDrawBlendMode(gRenderer, gBlendMode);
++	SDL_RenderSetLogicalSize(gRenderer, mWidth, mHeight);
++	SDL_RenderSetIntegerScale(gRenderer, SDL_FALSE);
++	SDL_RenderSetVSync(gRenderer, 1);
++	// PvZ advances gameplay on a 100 Hz fixed clock. The original framework's
++	// vsync-update mode decouples that clock from presentation, accumulating
++	// 100 simulation updates across 60 displayed frames.
++	mRefreshRate = 60;
++	mApp->mVSyncUpdates = true;
++	SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
++	SDL_RenderClear(gRenderer);
++	SDL_RenderPresent(gRenderer);
++	SDL_RenderClear(gRenderer);
++
++	mRGBBits = 32;
++	mRedBits = 8;
++	mGreenBits = 8;
++	mBlueBits = 8;
++	mRedShift = 0;
++	mGreenShift = 8;
++	mBlueShift = 16;
++	mRedMask = 0xffu << mRedShift;
++	mGreenMask = 0xffu << mGreenShift;
++	mBlueMask = 0xffu << mBlueShift;
++
++	SetVideoOnlyDraw(false);
++	return 1;
++}
++
++bool GLInterface::Redraw(Rect*)
++{
++	Flush();
++	return true;
++}
++
++void GLInterface::SetVideoOnlyDraw(bool)
++{
++	delete mScreenImage;
++	mScreenImage = new GLImage(this);
++	mScreenImage->mWidth = mWidth;
++	mScreenImage->mHeight = mHeight;
++	mScreenImage->SetImageMode(false, false);
++}
++
++void GLInterface::SetCursorPos(int x, int y)
++{
++	mNextCursorX = x;
++	mNextCursorY = y;
++}
++
++bool GLInterface::PreDraw()
++{
++	SetDrawMode(Graphics::DRAWMODE_NORMAL);
++	return gRenderer != nullptr;
++}
++
++void GLInterface::Flush()
++{
++	if (!gRenderer)
++		return;
++	SDL_RenderSetClipRect(gRenderer, nullptr);
++	SDL_RenderPresent(gRenderer);
++	SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
++	SDL_RenderClear(gRenderer);
++}
++
++bool GLInterface::CreateImageTexture(MemoryImage* image)
++{
++	bool purgeBits = false;
++	if (!image->mRenderData)
++	{
++		image->mRenderData = new TextureData();
++		purgeBits = image->mPurgeBits;
++		std::scoped_lock lock(mCritSect);
++		mImageSet.insert(image);
++	}
++	TextureData* data = static_cast<TextureData*>(image->mRenderData);
++	data->CheckCreateTextures(image);
++	if (purgeBits)
++		image->PurgeBits();
++	return data->mPixelFormat != PixelFormat_Unknown;
++}
++
++bool GLInterface::RecoverBits(MemoryImage* image)
++{
++	if (!image->mRenderData)
++		return false;
++	TextureData* data = static_cast<TextureData*>(image->mRenderData);
++	if (data->mBitsChangedCount != image->mBitsChangedCount
++		|| data->mCpuBits.size()
++			!= static_cast<size_t>(image->mWidth) * image->mHeight)
++	{
++		return false;
++	}
++	std::memcpy(
++		image->mBits,
++		data->mCpuBits.data(),
++		data->mCpuBits.size() * sizeof(uint32_t));
++	return true;
++}
++
++void GLInterface::PushTransform(const SexyMatrix3& transform, bool concatenate)
++{
++	if (mTransformStack.empty() || !concatenate)
++		mTransformStack.push_back(transform);
++	else
++		mTransformStack.push_back(transform * mTransformStack.back());
++}
++
++void GLInterface::PopTransform()
++{
++	if (!mTransformStack.empty())
++		mTransformStack.pop_back();
++}
++
++void GLInterface::Blt(
++	Image* image,
++	float x,
++	float y,
++	const Rect& sourceRect,
++	const Color& color,
++	int drawMode,
++	bool linearFilter)
++{
++	if (!mTransformStack.empty())
++	{
++		BltClipF(
++			image,
++			x,
++			y,
++			sourceRect,
++			nullptr,
++			color,
++			drawMode,
++			linearFilter);
++		return;
++	}
++	if (!PreDraw())
++		return;
++	MemoryImage* memoryImage = static_cast<MemoryImage*>(image);
++	if (!CreateImageTexture(memoryImage))
++		return;
++	SetDrawMode(drawMode);
++	gLinearFilter = linearFilter;
++	static_cast<TextureData*>(memoryImage->mRenderData)->Blt(
++		x,
++		y,
++		sourceRect,
++		color);
++}
++
++void GLInterface::BltClipF(
++	Image* image,
++	float x,
++	float y,
++	const Rect& sourceRect,
++	const Rect* clipRect,
++	const Color& color,
++	int drawMode,
++	bool linearFilter)
++{
++	SexyTransform2D transform;
++	transform.Translate(x, y);
++	BltTransformed(
++		image,
++		clipRect,
++		color,
++		drawMode,
++		sourceRect,
++		transform,
++		linearFilter);
++}
++
++void GLInterface::BltMirror(
++	Image* image,
++	float x,
++	float y,
++	const Rect& sourceRect,
++	const Color& color,
++	int drawMode,
++	bool linearFilter)
++{
++	SexyTransform2D transform;
++	transform.Translate(-sourceRect.mWidth, 0);
++	transform.Scale(-1, 1);
++	transform.Translate(x, y);
++	BltTransformed(
++		image,
++		nullptr,
++		color,
++		drawMode,
++		sourceRect,
++		transform,
++		linearFilter);
++}
++
++void GLInterface::StretchBlt(
++	Image* image,
++	const Rect& destinationRect,
++	const Rect& sourceRect,
++	const Rect* clipRect,
++	const Color& color,
++	int drawMode,
++	bool fastStretch,
++	bool mirror)
++{
++	float scaleX =
++		static_cast<float>(destinationRect.mWidth) / sourceRect.mWidth;
++	float scaleY =
++		static_cast<float>(destinationRect.mHeight) / sourceRect.mHeight;
++	SexyTransform2D transform;
++	if (mirror)
++	{
++		transform.Translate(-sourceRect.mWidth, 0);
++		transform.Scale(-scaleX, scaleY);
++	}
++	else
++	{
++		transform.Scale(scaleX, scaleY);
++	}
++	transform.Translate(destinationRect.mX, destinationRect.mY);
++	BltTransformed(
++		image,
++		clipRect,
++		color,
++		drawMode,
++		sourceRect,
++		transform,
++		!fastStretch);
++}
++
++void GLInterface::BltRotated(
++	Image* image,
++	float x,
++	float y,
++	const Rect* clipRect,
++	const Color& color,
++	int drawMode,
++	double rotation,
++	float rotationCenterX,
++	float rotationCenterY,
++	const Rect& sourceRect)
++{
++	SexyTransform2D transform;
++	transform.Translate(-rotationCenterX, -rotationCenterY);
++	transform.RotateRad(rotation);
++	transform.Translate(x + rotationCenterX, y + rotationCenterY);
++	BltTransformed(
++		image,
++		clipRect,
++		color,
++		drawMode,
++		sourceRect,
++		transform,
++		true);
++}
++
++void GLInterface::BltTransformed(
++	Image* image,
++	const Rect* clipRect,
++	const Color& color,
++	int drawMode,
++	const Rect& sourceRect,
++	const SexyMatrix3& transform,
++	bool linearFilter,
++	float x,
++	float y,
++	bool center)
++{
++	if (!PreDraw())
++		return;
++	MemoryImage* memoryImage = static_cast<MemoryImage*>(image);
++	if (!CreateImageTexture(memoryImage))
++		return;
++	SetDrawMode(drawMode);
++	gLinearFilter = linearFilter;
++	TextureData* data = static_cast<TextureData*>(memoryImage->mRenderData);
++
++	if (!mTransformStack.empty())
++	{
++		if (x != 0 || y != 0)
++		{
++			SexyTransform2D combined;
++			if (center)
++				combined.Translate(-sourceRect.mWidth / 2.0f, -sourceRect.mHeight / 2.0f);
++			combined = transform * combined;
++			combined.Translate(x, y);
++			combined = mTransformStack.back() * combined;
++			data->BltTransformed(combined, sourceRect, color, clipRect);
++		}
++		else
++		{
++			SexyTransform2D combined = mTransformStack.back() * transform;
++			data->BltTransformed(
++				combined,
++				sourceRect,
++				color,
++				clipRect,
++				x,
++				y,
++				center);
++		}
++	}
++	else
++	{
++		data->BltTransformed(
++			transform,
++			sourceRect,
++			color,
++			clipRect,
++			x,
++			y,
++			center);
++	}
++}
++
++void GLInterface::DrawLine(
++	double startX,
++	double startY,
++	double endX,
++	double endY,
++	const Color& color,
++	int drawMode)
++{
++	if (!PreDraw())
++		return;
++	SetDrawMode(drawMode);
++	SexyVector2 start(startX, startY);
++	SexyVector2 end(endX, endY);
++	if (!mTransformStack.empty())
++	{
++		start = mTransformStack.back() * start;
++		end = mTransformStack.back() * end;
++	}
++	SDL_SetRenderDrawColor(
++		gRenderer,
++		static_cast<Uint8>(color.mRed),
++		static_cast<Uint8>(color.mGreen),
++		static_cast<Uint8>(color.mBlue),
++		static_cast<Uint8>(color.mAlpha));
++	SDL_RenderDrawLineF(gRenderer, start.x, start.y, end.x, end.y);
++}
++
++void GLInterface::FillRect(
++	const Rect& rect,
++	const Color& color,
++	int drawMode)
++{
++	if (!PreDraw())
++		return;
++	SetDrawMode(drawMode);
++	float x = rect.mX;
++	float y = rect.mY;
++	float width = rect.mWidth;
++	float height = rect.mHeight;
++	uint32_t packedColor = color.ToGLColor();
++	GLVertex vertices[4] = {
++		{x, y, 0, packedColor, 0, 0},
++		{x, y + height, 0, packedColor, 0, 0},
++		{x + width, y, 0, packedColor, 0, 0},
++		{x + width, y + height, 0, packedColor, 0, 0}
++	};
++	if (!mTransformStack.empty())
++	{
++		for (auto& vertex : vertices)
++		{
++			SexyVector2 point(vertex.sx, vertex.sy);
++			point = mTransformStack.back() * point;
++			vertex.sx = point.x;
++			vertex.sy = point.y;
++		}
++	}
++	RenderVertices(nullptr, vertices, 4, Primitive::TriangleStrip);
++}
++
++void GLInterface::DrawTriangle(
++	const TriVertex& first,
++	const TriVertex& second,
++	const TriVertex& third,
++	const Color& color,
++	int drawMode)
++{
++	if (!PreDraw())
++		return;
++	SetDrawMode(drawMode);
++	uint32_t packedColor = color.ToGLColor();
++	GLVertex vertices[3] = {
++		{first.x, first.y, 0, VertexColor(first.color, packedColor), 0, 0},
++		{second.x, second.y, 0, VertexColor(second.color, packedColor), 0, 0},
++		{third.x, third.y, 0, VertexColor(third.color, packedColor), 0, 0}
++	};
++	RenderVertices(nullptr, vertices, 3, Primitive::Triangles);
++}
++
++void GLInterface::DrawTriangleTex(
++	const TriVertex& first,
++	const TriVertex& second,
++	const TriVertex& third,
++	const Color& color,
++	int drawMode,
++	Image* texture,
++	bool blend)
++{
++	TriVertex vertices[1][3] = {{first, second, third}};
++	DrawTrianglesTex(vertices, 1, color, drawMode, texture, 0, 0, blend);
++}
++
++void GLInterface::DrawTrianglesTex(
++	const TriVertex vertices[][3],
++	int triangleCount,
++	const Color& color,
++	int drawMode,
++	Image* texture,
++	float translateX,
++	float translateY,
++	bool blend)
++{
++	if (!PreDraw())
++		return;
++	MemoryImage* memoryImage = static_cast<MemoryImage*>(texture);
++	if (!CreateImageTexture(memoryImage))
++		return;
++	SetDrawMode(drawMode);
++	gLinearFilter = blend;
++	bool clampUv =
++		(memoryImage->mRenderFlags & RenderImageFlag_Repeat) == 0;
++	static_cast<TextureData*>(memoryImage->mRenderData)->BltTriangles(
++		vertices,
++		triangleCount,
++		color.ToGLColor(),
++		translateX,
++		translateY,
++		clampUv);
++}
++
++void GLInterface::DrawTrianglesTexStrip(
++	const TriVertex vertices[],
++	int triangleCount,
++	const Color& color,
++	int drawMode,
++	Image* texture,
++	float translateX,
++	float translateY,
++	bool blend)
++{
++	TriVertex batch[100][3];
++	int completed = 0;
++	while (completed < triangleCount)
++	{
++		int count = std::min(100, triangleCount - completed);
++		for (int index = 0; index < count; ++index)
++		{
++			batch[index][0] = vertices[completed];
++			batch[index][1] = vertices[completed + 1];
++			batch[index][2] = vertices[completed + 2];
++			++completed;
++		}
++		DrawTrianglesTex(
++			batch,
++			count,
++			color,
++			drawMode,
++			texture,
++			translateX,
++			translateY,
++			blend);
++	}
++}
++
++void GLInterface::FillPoly(
++	const Point vertices[],
++	int vertexCount,
++	const Rect* clipRect,
++	const Color& color,
++	int drawMode,
++	int translateX,
++	int translateY)
++{
++	if (vertexCount < 3 || !PreDraw())
++		return;
++	SetDrawMode(drawMode);
++	uint32_t packedColor = color.ToGLColor();
++	VertexList output;
++	output.reserve(vertexCount);
++	for (int index = 0; index < vertexCount; ++index)
++	{
++		GLVertex vertex{
++			vertices[index].mX + static_cast<float>(translateX),
++			vertices[index].mY + static_cast<float>(translateY),
++			0,
++			packedColor,
++			0,
++			0
++		};
++		if (!mTransformStack.empty())
++		{
++			SexyVector2 point(vertex.sx, vertex.sy);
++			point = mTransformStack.back() * point;
++			vertex.sx = point.x;
++			vertex.sy = point.y;
++		}
++		output.push_back(vertex);
++	}
++	ScopedClipRect clip(clipRect);
++	RenderVertices(nullptr, output, Primitive::TriangleFan);
++}
+diff --git a/src/SexyAppFramework/misc/MTRand.cpp b/src/SexyAppFramework/misc/MTRand.cpp
+index d0e030c..2f3ffa4 100644
+--- a/src/SexyAppFramework/misc/MTRand.cpp
++++ b/src/SexyAppFramework/misc/MTRand.cpp
+@@ -87,7 +87,7 @@ void MTRand::SetRandAllowed(bool allowed)
+ 
+ void MTRand::SRand(const std::string& theSerialData)
+ {
+-	if (theSerialData.size() == MTRAND_N*4 + 4)
++	if (theSerialData.size() == SERIALIZED_SIZE)
+ 	{
+ 		// little-endian, 4 bytes per word: independent of host byte order
+ 		const char* aPtr = theSerialData.c_str();
+@@ -200,12 +200,17 @@ float MTRand::Next(float range)
+ 	return NextNoAssert(range);
+ }
+ 
+-std::string MTRand::Serialize()
++int MTRand::StateIndex() const
++{
++	return mti;
++}
++
++std::string MTRand::Serialize() const
+ {
+ 	std::string aString;
+ 
+ 	// little-endian, 4 bytes per word: independent of host byte order
+-	aString.resize(MTRAND_N*4 + 4);
++	aString.resize(SERIALIZED_SIZE);
+ 	char* aPtr = aString.data();
+ 	for (int i = 0; i < MTRAND_N; i++)
+ 	{
+diff --git a/src/SexyAppFramework/misc/MTRand.h b/src/SexyAppFramework/misc/MTRand.h
+index 9319f71..22f0e47 100644
+--- a/src/SexyAppFramework/misc/MTRand.h
++++ b/src/SexyAppFramework/misc/MTRand.h
+@@ -1,6 +1,7 @@
+ #ifndef __MTRAND_H__
+ #define __MTRAND_H__
+ 
++#include <cstddef>
+ #include <string>
+ #include <stdint.h>
+ 
+@@ -15,6 +16,9 @@ class MTRand
+ 	int mti;
+ 
+ public:
++	static constexpr std::size_t SERIALIZED_SIZE =
++		MTRAND_N * sizeof(uint32_t) + sizeof(uint32_t);
++
+ 	MTRand(const std::string& theSerialData);
+ 	MTRand(unsigned long seed);
+ 	MTRand();
+@@ -27,8 +31,9 @@ public:
+ 	unsigned long Next(unsigned long range);
+ 	float NextNoAssert(float range);
+ 	float Next( float range );
++	int StateIndex() const;
+ 
+-	std::string Serialize();
++	std::string Serialize() const;
+ 
+ 	static void SetRandAllowed(bool allowed);
+ };
+diff --git a/src/SexyAppFramework/platform/default/Window.cpp b/src/SexyAppFramework/platform/default/Window.cpp
+index 8fad529..f047500 100644
+--- a/src/SexyAppFramework/platform/default/Window.cpp
++++ b/src/SexyAppFramework/platform/default/Window.cpp
+@@ -27,7 +27,9 @@
+ #include "SexyAppBase.h"
+ #include "graphics/GLInterface.h"
+ #include "graphics/GLImage.h"
++#if !defined(PVZ_MACOS_METAL)
+ #include "graphics/GLPlatform.h"
++#endif
+ #include "widget/WidgetManager.h"
+ 
+ #ifndef SDL_HINT_APP_ID // SDL2 compatibility (already defined in SDL3.2+)
+@@ -53,8 +55,103 @@ void SexyAppBase::MakeWindow()
+ 
+ 		SDL_Init(SDL_INIT_VIDEO);
+ 
++#if defined(PVZ_MACOS_METAL)
++		Uint32 winFlags = SDL_WINDOW_RESIZABLE
++			| SDL_WINDOW_ALLOW_HIGHDPI
++			| (!mIsWindowed ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
++#if defined(PVZWM_DIFFERENTIAL_BRIDGE)
++		winFlags |= SDL_WINDOW_HIDDEN;
++#endif
++		if (mDemoHidden)
++			winFlags |= SDL_WINDOW_HIDDEN;
++
++		int aWindowWidth = mWidth * IMG_DOWNSCALE;
++		int aWindowHeight = mHeight * IMG_DOWNSCALE;
++		if (mNativeWindowResolution && mIsWindowed)
++		{
++			SDL_Rect aUsableBounds{};
++			if (SDL_GetDisplayUsableBounds(0, &aUsableBounds) == 0)
++			{
++				aWindowWidth = aUsableBounds.w;
++				aWindowHeight = aWindowWidth * mHeight / mWidth;
++				if (aWindowHeight > aUsableBounds.h)
++				{
++					aWindowHeight = aUsableBounds.h;
++					aWindowWidth = aWindowHeight * mWidth / mHeight;
++				}
++			}
++		}
++
++		mWindow = (void*)SDL_CreateWindow(
++			mTitle.c_str(),
++			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
++			aWindowWidth, aWindowHeight, winFlags);
++		if (!mWindow)
++		{
++			Sexy::LogError("Failed to create the Metal game window: %s", SDL_GetError());
++			return;
++		}
++
++		Sexy::PrintF(
++			"Window mode: %s%s (%dx%d logical, %dx%d window)\n",
++			(winFlags & SDL_WINDOW_FULLSCREEN_DESKTOP) ? "fullscreen" : "windowed",
++			(winFlags & SDL_WINDOW_HIDDEN) ? ", hidden" : "",
++			mWidth,
++			mHeight,
++			aWindowWidth,
++			aWindowHeight);
++
++		int metalDriver = -1;
++		for (int i = 0; i < SDL_GetNumRenderDrivers(); ++i)
++		{
++			SDL_RendererInfo info{};
++			if (SDL_GetRenderDriverInfo(i, &info) == 0
++				&& info.name != nullptr
++				&& std::string_view(info.name) == "metal")
++			{
++				metalDriver = i;
++				break;
++			}
++		}
++		if (metalDriver < 0)
++		{
++			SDL_DestroyWindow((SDL_Window*)mWindow);
++			mWindow = nullptr;
++			Sexy::LogError("SDL's native Metal renderer is unavailable.");
++			return;
++		}
++
++		mContext = (void*)SDL_CreateRenderer(
++			(SDL_Window*)mWindow,
++			metalDriver,
++			SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
++		if (!mContext)
++		{
++			SDL_DestroyWindow((SDL_Window*)mWindow);
++			mWindow = nullptr;
++			Sexy::LogError("Failed to create the Metal renderer: %s", SDL_GetError());
++			return;
++		}
++
++		SDL_RendererInfo rendererInfo{};
++		SDL_GetRendererInfo((SDL_Renderer*)mContext, &rendererInfo);
++		int aDrawableWidth = 0;
++		int aDrawableHeight = 0;
++		SDL_GetRendererOutputSize((SDL_Renderer*)mContext, &aDrawableWidth, &aDrawableHeight);
++		Sexy::PrintF(
++			"Renderer: %s (Metal, accelerated=%s, vsync=%s, drawable=%dx%d, max_texture=%dx%d)\n",
++			rendererInfo.name ? rendererInfo.name : "unknown",
++			(rendererInfo.flags & SDL_RENDERER_ACCELERATED) ? "yes" : "no",
++			(rendererInfo.flags & SDL_RENDERER_PRESENTVSYNC) ? "yes" : "no",
++			aDrawableWidth,
++			aDrawableHeight,
++			rendererInfo.max_texture_width,
++			rendererInfo.max_texture_height);
++#else
+ 		Uint32 winFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
+ 			| (!mIsWindowed ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
++		if (mDemoHidden)
++			winFlags |= SDL_WINDOW_HIDDEN;
+ 
+ 		// Try OpenGL ES 2.0 first (Linux, most Windows drivers, ANGLE, etc.)
+ 		SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+@@ -114,6 +211,7 @@ void SexyAppBase::MakeWindow()
+ #endif
+ 
+ 		SDL_GL_SetSwapInterval(1);
++#endif
+ 	}
+ 
+ 	if (mGLInterface == nullptr)
+diff --git a/src/SexyAppFramework/sound/SDL-Mixer-X/src/codecs/music_openmpt.c b/src/SexyAppFramework/sound/SDL-Mixer-X/src/codecs/music_openmpt.c
+index 5b80861..5a96c6e 100644
+--- a/src/SexyAppFramework/sound/SDL-Mixer-X/src/codecs/music_openmpt.c
++++ b/src/SexyAppFramework/sound/SDL-Mixer-X/src/codecs/music_openmpt.c
+@@ -189,17 +189,14 @@ void *OPENMPT_CreateFromRW(SDL_RWops *src, int freesrc)
+         return NULL;
+     }
+ 	music->internal_buf = SDL_malloc(sizeof(int16_t) * 1024 * 2);
+-	if (!music->buffer)
++	if (!music->internal_buf)
+ 	{
+-		SDL_free(music->buffer);
+         OPENMPT_Delete(music);
+         return NULL;
+     }
+-	music->ext_interactive = SDL_malloc(sizeof(openmpt_module_ext_interface_interactive));
++	music->ext_interactive = SDL_calloc(1, sizeof(openmpt_module_ext_interface_interactive));
+ 	if (!music->ext_interactive)
+ 	{
+-		SDL_free(music->buffer);
+-		SDL_free(music->internal_buf);
+         OPENMPT_Delete(music);
+         return NULL;
+     }
+@@ -216,9 +213,18 @@ void *OPENMPT_CreateFromRW(SDL_RWops *src, int freesrc)
+     if (!music->ext) {
+         OPENMPT_Delete(music);
+         return NULL;
+-    }
++	}
+ 	music->file = openmpt.openmpt_module_ext_get_module(music->ext);
+-	openmpt.openmpt_module_ext_get_interface(music->ext, "interactive", music->ext_interactive, sizeof(openmpt_module_ext_interface_interactive));
++	if (!openmpt.openmpt_module_ext_get_interface(
++		music->ext,
++		LIBOPENMPT_EXT_C_INTERFACE_INTERACTIVE,
++		music->ext_interactive,
++		sizeof(openmpt_module_ext_interface_interactive)))
++	{
++		Mix_SetError("libopenmpt interactive interface is unavailable");
++		OPENMPT_Delete(music);
++		return NULL;
++	}
+ 
+     meta_tags_init(&music->tags);
+     meta_tags_set(&music->tags, MIX_META_TITLE, openmpt.openmpt_module_get_metadata(music->file, "title"));
+@@ -393,6 +399,22 @@ static int OPENMPT_SetChannelVolume(void *context, int channel, int volume)
+     return 0;
+ }
+ 
++/* Set a persistent tempo multiplier without changing playback pitch. */
++static int OPENMPT_SetTempo(void *context, double tempo)
++{
++	OPENMPT_Music *music = (OPENMPT_Music *)context;
++	if (tempo <= 0.0 || tempo > 4.0)
++		return -1;
++	return music->ext_interactive->set_tempo_factor(music->ext, tempo) ? 0 : -1;
++}
++
++/* Get the persistent tempo multiplier. */
++static double OPENMPT_GetTempo(void *context)
++{
++	OPENMPT_Music *music = (OPENMPT_Music *)context;
++	return music->ext_interactive->get_tempo_factor(music->ext);
++}
++
+ /* Jump (seek) to a given position */
+ static int OPENMPT_Seek(void *context, double position)
+ {
+@@ -469,8 +491,8 @@ Mix_MusicInterface Mix_MusicInterface_OPENMPT =
+     OPENMPT_Seek,
+     OPENMPT_Tell,
+     OPENMPT_Duration,
+-    NULL,   /* SetTempo [MIXER-X] */
+-    NULL,   /* GetTempo [MIXER-X] */
++    OPENMPT_SetTempo,
++    OPENMPT_GetTempo,
+     NULL,   /* SetSpeed [MIXER-X] */
+     NULL,   /* GetSpeed [MIXER-X] */
+     NULL,   /* SetPitch [MIXER-X] */
+diff --git a/tests/OpenMptTempoTest.cpp b/tests/OpenMptTempoTest.cpp
+new file mode 100644
+index 0000000..6129c4c
+--- /dev/null
++++ b/tests/OpenMptTempoTest.cpp
+@@ -0,0 +1,100 @@
++/*
++ * SPDX-License-Identifier: LGPL-3.0-or-later
++ */
++
++#include <SDL.h>
++#include <SDL_mixer_ext/SDL_mixer_ext.h>
++
++#include "Lawn/System/MusicTempo.h"
++
++#include <cmath>
++#include <cstdlib>
++#include <iostream>
++#include <vector>
++
++namespace
++{
++constexpr std::size_t kModHeaderSize = 1084;
++constexpr std::size_t kPatternSize = 64 * 4 * 4;
++
++[[noreturn]] void Fail(const char* theMessage)
++{
++	std::cerr << theMessage << ": " << Mix_GetError() << '\n';
++	std::exit(1);
++}
++
++std::vector<unsigned char> MakeSilentMod()
++{
++	std::vector<unsigned char> aModule(kModHeaderSize + kPatternSize, 0);
++	aModule[950] = 1;  // Song length.
++	aModule[1080] = 'M';
++	aModule[1081] = '.';
++	aModule[1082] = 'K';
++	aModule[1083] = '.';
++
++	// Row zero, channel zero: ProTracker F7D sets the native tempo to 125.
++	aModule[kModHeaderSize + 2] = 0x0F;
++	aModule[kModHeaderSize + 3] = 125;
++	return aModule;
++}
++
++void RequireTempo(Mix_Music* theMusic, double theExpected)
++{
++	const double aTempo = Mix_GetMusicTempo(theMusic);
++	if (std::abs(aTempo - theExpected) > 1.0e-4)
++	{
++		std::cerr << "expected tempo factor " << theExpected
++				  << ", got " << aTempo << '\n';
++		std::exit(1);
++	}
++}
++}
++
++int main()
++{
++	if (MusicTempoFactorForRowDifference(4, 155.0f) >= 1.0 ||
++		MusicTempoFactorForRowDifference(1, 155.0f) >= 1.0 ||
++		MusicTempoFactorForRowDifference(0, 155.0f) != 1.0 ||
++		MusicTempoFactorForRowDifference(-1, 155.0f) <= 1.0 ||
++		MusicTempoFactorForRowDifference(-4, 155.0f) <= 1.0)
++	{
++		std::cerr << "music row-difference tempo correction has the wrong direction\n";
++		return 1;
++	}
++
++	SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
++	if (SDL_Init(SDL_INIT_AUDIO) != 0)
++		Fail("SDL audio initialization failed");
++	if ((Mix_Init(MIX_INIT_MOD) & MIX_INIT_MOD) == 0)
++		Fail("MOD codec initialization failed");
++	if (Mix_OpenAudio(44100, AUDIO_S16SYS, 2, 1024) != 0)
++		Fail("audio mixer initialization failed");
++
++	std::vector<unsigned char> aModule = MakeSilentMod();
++	SDL_RWops* aStream = SDL_RWFromConstMem(
++		aModule.data(),
++		static_cast<int>(aModule.size()));
++	if (aStream == nullptr)
++		Fail("module stream creation failed");
++	Mix_Music* aMusic = Mix_LoadMUS_RW(aStream, 1);
++	if (aMusic == nullptr)
++		Fail("synthetic MOD load failed");
++
++	RequireTempo(aMusic, 1.0);
++	if (Mix_SetMusicTempo(aMusic, 0.98) != 0)
++		Fail("slower tempo factor failed");
++	RequireTempo(aMusic, 0.98);
++	if (Mix_SetMusicTempo(aMusic, 1.02) != 0)
++		Fail("faster tempo factor failed");
++	RequireTempo(aMusic, 1.02);
++	if (Mix_SetMusicTempo(aMusic, 1.0) != 0)
++		Fail("tempo reset failed");
++	RequireTempo(aMusic, 1.0);
++
++	Mix_FreeMusic(aMusic);
++	Mix_CloseAudio();
++	Mix_Quit();
++	SDL_Quit();
++	std::cout << "OpenMPT tempo-factor regression passed\n";
++	return 0;
++}
+diff --git a/tests/TodStringFileTest.cpp b/tests/TodStringFileTest.cpp
+new file mode 100644
+index 0000000..8a6cc0d
+--- /dev/null
++++ b/tests/TodStringFileTest.cpp
+@@ -0,0 +1,155 @@
++/*
++ * SPDX-License-Identifier: LGPL-3.0-or-later
++ */
++
++#include "Resources.h"
++#include "Sexy.TodLib/TodCommon.h"
++#include "Sexy.TodLib/TodStringFile.h"
++#include "SexyAppFramework/graphics/Font.h"
++#include "SexyAppFramework/graphics/Graphics.h"
++
++#include <cstdlib>
++#include <iostream>
++#include <string>
++#include <string_view>
++#include <vector>
++
++using namespace Sexy;
++
++bool (*gAppCloseRequest)();
++bool (*gAppHasUsedCheatKeys)();
++std::string (*gGetCurrentLevelName)();
++
++namespace
++{
++struct DrawCall
++{
++	std::string mText;
++	Color mColor;
++	int mY;
++};
++
++class RecordingFont : public _Font
++{
++public:
++	std::vector<DrawCall> mDrawCalls;
++
++	RecordingFont()
++	{
++		mAscent = 8;
++		mAscentPadding = 0;
++		mHeight = 10;
++		mLineSpacingOffset = 2;
++	}
++
++	int StringWidth(std::string_view theString) override
++	{
++		return static_cast<int>(theString.size());
++	}
++
++	int CharWidth(char32_t) override
++	{
++		return 1;
++	}
++
++	int CharWidthKern(char32_t, char32_t) override
++	{
++		return 1;
++	}
++
++	void DrawString(
++		Graphics*,
++		int,
++		int theY,
++		std::string_view theString,
++		const Color& theColor,
++		const Rect&) override
++	{
++		if (!theString.empty())
++			mDrawCalls.push_back({ std::string(theString), theColor, theY });
++	}
++
++	_Font* Duplicate() override
++	{
++		return new RecordingFont(*this);
++	}
++};
++
++[[noreturn]] void Fail(int theWidth, const DrawCall& theCall)
++{
++	std::cerr
++		<< "width " << theWidth << " rendered hidden metal text \""
++		<< theCall.mText << "\" with alpha " << theCall.mColor.mAlpha << '\n';
++	std::exit(1);
++}
++
++void TestFormatTokensAfterWrapDoNotChangePreviousLineSpacing()
++{
++	RecordingFont aFont;
++	Graphics aGraphics;
++	aGraphics.mClipRect = Rect(-1000, -1000, 2000, 2000);
++	TodDrawStringWrappedHelper(
++		&aGraphics,
++		"one two three {SHORTLINE}four five",
++		Rect(0, 0, 13, 200),
++		&aFont,
++		Color(40, 50, 90),
++		DrawStringJustification::DS_ALIGN_LEFT,
++		true);
++
++	if (aFont.mDrawCalls.size() < 2 ||
++		aFont.mDrawCalls[0].mText != "one two three" ||
++		aFont.mDrawCalls[0].mY != 8 ||
++		aFont.mDrawCalls[1].mText != "four five" ||
++		aFont.mDrawCalls[1].mY != 20)
++	{
++		std::cerr << "format token after wrap changed the preceding line spacing\n";
++		std::exit(1);
++	}
++}
++}
++
++int main()
++{
++	TodStringListSetColors(gLawnStringFormats, gLawnStringFormatCount);
++	for (TodStringListFormat& aFormat : gLawnStringFormats)
++	{
++		if (TestBit(
++			aFormat.mFormatFlags,
++			TodStringFormatFlag::TOD_FORMAT_HIDE_UNTIL_MAGNETSHROOM))
++		{
++			aFormat.mNewColor.mAlpha = 0;
++			aFormat.mLineSpacingOffset = -17;
++		}
++	}
++
++	const std::string aDescription =
++		"{KEYWORD}Weakness:{STAT} fume-shroom{METAL} and magnet-shroom{KEYWORD}";
++	for (int aWidth = 13; aWidth <= 60; ++aWidth)
++	{
++		RecordingFont aFont;
++		Graphics aGraphics;
++		aGraphics.mClipRect = Rect(-1000, -1000, 2000, 2000);
++		TodDrawStringWrappedHelper(
++			&aGraphics,
++			aDescription,
++			Rect(0, 0, aWidth, 200),
++			&aFont,
++			Color(40, 50, 90),
++			DrawStringJustification::DS_ALIGN_LEFT,
++			true);
++
++		for (const DrawCall& aCall : aFont.mDrawCalls)
++		{
++			if (aCall.mText.find("magnet-shroom") != std::string::npos &&
++				aCall.mColor.mAlpha != 0)
++			{
++				Fail(aWidth, aCall);
++			}
++		}
++	}
++
++	TestFormatTokensAfterWrapDoNotChangePreviousLineSpacing();
++	std::cout << "TodStringFile wrapped-format regression passed\n";
++	return 0;
 +}

@@ -1,6 +1,6 @@
 import importlib.util
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -8,7 +8,6 @@ import torch
 from pvzwm.agents.goal_iql import GoalEpisode
 from pvzwm.device import DeviceInfo
 from pvzwm.portable import PortableActionCodec, PortableProcessConfig
-
 
 _SPEC = importlib.util.spec_from_file_location(
     "eval_goal_iql_reachability",

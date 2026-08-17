@@ -1,0 +1,9 @@
+{"cmd":"reset","level":1,"seed":7,"seed_types":[0],"frame_width":0,"frame_height":0}
+{"cmd":"step","action":19,"ticks":1,"frame_width":0,"frame_height":0}
+{"cmd":"step","action":0,"ticks":1,"frame_width":0,"frame_height":0,"repeat":800}
+{"cmd":"step","action":649,"ticks":1,"frame_width":0,"frame_height":0}
+{"cmd":"step","action":0,"ticks":1,"frame_width":0,"frame_height":0,"repeat":800}
+{"cmd":"step","action":649,"ticks":1,"frame_width":0,"frame_height":0}
+{"cmd":"step","action":0,"ticks":1,"frame_width":0,"frame_height":0,"repeat":100}
+{"cmd":"step","action":20,"ticks":1,"frame_width":0,"frame_height":0}
+{"cmd":"step","action":0,"ticks":1,"frame_width":0,"frame_height":0,"repeat":5038}

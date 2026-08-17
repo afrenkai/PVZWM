@@ -41,7 +41,7 @@ def test_parse_wiki_asset_metadata() -> None:
 def test_data_audit_separates_synthetic_and_original(
     tmp_path: Path, monkeypatch
 ) -> None:
-    monkeypatch.setattr(audit_module, "discover_macos_pvz", lambda: [])
+    monkeypatch.setattr(audit_module, "discover_macos_pvz", list)
     data = tmp_path / "data"
     data.mkdir()
     transition = Transition(
@@ -65,3 +65,38 @@ def test_data_audit_separates_synthetic_and_original(
     assert status["python_port_transitions"] == 1
     assert status["ready_for_original_game_training"] is True
     assert status["ready_for_python_port_training"] is True
+
+
+def test_data_audit_reports_reference_readiness(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(audit_module, "discover_macos_pvz", list)
+    reference = tmp_path / "data" / "reference" / "local"
+    reference.mkdir(parents=True)
+    (reference / "goty-reference.json").write_text(
+        json.dumps(
+            {
+                "kind": "pvz-goty-reference",
+                "content_id": "a" * 64,
+                "baseline_kind": "installation",
+                "declared_version": "1.2.0.1073",
+                "distribution": "steam-windows",
+                "ready_for_black_box_comparison": True,
+            }
+        )
+    )
+
+    status = audit_data(tmp_path / "data")
+
+    assert status["reference_metadata_files"] == 1
+    assert status["ready_for_original_game_comparison"] is True
+    assert status["reference_manifests"] == [
+        {
+            "path": str(reference / "goty-reference.json"),
+            "content_id": "a" * 64,
+            "baseline_kind": "installation",
+            "declared_version": "1.2.0.1073",
+            "distribution": "steam-windows",
+            "ready_for_black_box_comparison": True,
+        }
+    ]

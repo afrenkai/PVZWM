@@ -6,8 +6,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from pvzwm.models.visreg import visreg_objective
 from pvzwm.models.regularizers import sigreg_objective, vicreg_objective
+from pvzwm.models.visreg import visreg_objective
 
 
 class VectorEncoder(nn.Module):

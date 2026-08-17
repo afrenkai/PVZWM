@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-
 _SPEC = importlib.util.spec_from_file_location(
     "evolve_portable_policy", Path("scripts/evolve_portable_policy.py")
 )
