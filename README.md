@@ -188,12 +188,13 @@ on 1-10 through 3-10, deliberate silence on Stormy Night 4-10, and the Zomboss
 theme on 5-10. `make test-modes` checks the same GOTY precedence across all 70
 secondary modes.
 
-Separately, an experimental allocation-free C11 batch simulator mirrors the clean-room
-environment's 181-action/192-feature contract. Metal is the first planned
-accelerator on Apple Silicon, with CUDA as the compatible Linux training-host
-backend. PvZ-Portable remains the full-game fidelity oracle while mechanics are
-ported and checked stage by stage. See
-[the native simulator roadmap](docs/NATIVE_SIMULATOR.md).
+Separately, a PufferLib-compatible CUDA C environment mirrors the clean-room
+environment's 181-action/192-feature contract. Environment state, observations,
+requested actions, rewards, and terminals remain device-resident throughout a
+rollout. The older scalar C implementation remains only as a differential
+verification oracle while mechanics move into the CUDA environment. See
+[the native simulator roadmap](docs/NATIVE_SIMULATOR.md) and the
+[PufferLib overlay](pufferlib/README.md).
 
 Campaign research pages can be revision-pinned into DuckDB with `uv run pvzwm
 sync-campaign-wiki --pretty`. The archive retains source URLs, revision IDs,

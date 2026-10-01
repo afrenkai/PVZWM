@@ -1,88 +1,89 @@
-# Native simulator roadmap
+# PufferLib CUDA environment
 
-The concrete precedent is Elliot Arledge's
-[minecraftbench](https://github.com/Infatoshi/minecraftbench.com): rewrite a
-pinned game version as a PufferLib-style batched C/GPU RL environment, then
-score it against a real-game oracle. The key idea is excellent. Its own results
-also show why PVZWM should use differential verification and staged fidelity
-gates instead of trusting a large one-shot generated rewrite.
+The active high-throughput environment target is a CUDA C implementation for
+PufferLib. PvZ-Portable remains the full-game fidelity oracle. The older scalar
+C simulator remains a test oracle during migration, but it is not the intended
+rollout runtime.
 
-PVZWM already embeds a full C++ implementation through PvZ-Portable. That
-backend is the fidelity oracle, but its renderer, resource graph, and
-one-process-per-game control path are poorly shaped for high-throughput RL.
-The native simulator is a separate headless implementation whose primary
-contract is batched state transition, not presentation.
+The PufferLib overlay lives in `pufferlib/`. Its single environment source,
+`ocean/pvzwm/pvzwm.cu`, owns the transition rules, PufferLib GPU lifecycle, and
+CUDA kernels. Runtime and training configuration lives in
+`config/pvzwm.ini`.
 
-The first implementation in `native/` ports the existing 181-action,
-192-feature clean-room simulator to allocation-free C11. A batch owns one
-contiguous state array, and callers provide contiguous observation, reward,
-termination, and legality buffers. Its xorshift RNG is reproducible within the
-native backend but intentionally does not pretend to match NumPy or the
-authentic engine RNG. Full-game parity will require the authentic RNG/event
-schedule or an injected event tape as part of the conformance ABI.
-
-Build and benchmark it:
+Copy the overlay into a PufferLib checkout and build the CUDA source explicitly:
 
 ```bash
-make -C native
-uv run pytest tests/test_native.py
-uv run scripts/benchmark_native_env.py --envs 4096 --steps 10000
+cp -R pufferlib/ocean/pvzwm /path/to/PufferLib/ocean/
+cp pufferlib/config/pvzwm.ini /path/to/PufferLib/config/
+cd /path/to/PufferLib
+./build.sh pvzwm --cu
+./puffer train
 ```
 
-On macOS the output is `native/build/libpvzwm_native.dylib`; Linux produces a
-`.so`. The Python wrapper can also compile into a temporary directory for
-isolated tests.
+## Action-conditioned contract
 
-## Accelerator order
+The action space is a single 181-class categorical head. This preserves the
+existing action codec exactly:
 
-Metal is the first accelerator target because the active development machine is
-Apple Silicon. CUDA is the compatible training-host target, not the source of
-truth.
+- `0`: wait;
+- `1..45`: plant sunflower by row-major cell;
+- `46..90`: plant peashooter by row-major cell;
+- `91..135`: plant wall-nut by row-major cell;
+- `136..180`: shovel by row-major cell.
 
-1. Keep one scalar C transition implementation and a versioned state layout.
-2. Add a Metal compute backend using shared `MTLBuffer` storage and one
-   environment per grid thread. Apple unified memory avoids a PCIe transfer,
-   but command-encoding and framework copies still count.
-3. Benchmark complete rollout plus policy inference, not an isolated shader.
-   PyTorch MPS does not provide a general public zero-copy bridge for arbitrary
-   Metal buffers, so a faster simulator can still lose end to end.
-4. Add the CUDA kernel from the same conformance vectors after the Metal path
-   is correct. On discrete NVIDIA systems, state and rollout buffers must stay
-   device-resident.
-5. Retain the CPU C backend as the sanitizer/debug target and behavioral
-   reference for both GPU implementations.
+Every environment step consumes the requested action from PufferLib's device
+action buffer before advancing economy, combat, and time. PufferLib stores that
+action beside the resulting observation, reward, and terminal in its rollout.
+That stored action is the conditioning signal for a dynamics or world model:
+`action[t]` produces `observation[t+1]`.
 
-The current Command Line Tools installation includes the Metal framework and
-Objective-C headers but not the offline `metal`/`metallib` shader compilers.
-The first backend can compile embedded MSL with `newLibraryWithSource`; install
-full Xcode only when switching to offline `.metallib` builds.
+The current PufferLib GPU constructor does not pass its dynamic action-mask
+buffer into GPU environments. Illegal requested actions therefore advance as a
+wait action and add the configured `invalid_action_penalty`. This keeps every
+categorical action deterministic and preserves the requested action in the
+rollout. If the GPU ABI later exposes the mask buffer, legality can move into
+the sampler without changing action IDs or transition rules.
+
+## Device layout
+
+One `Env` is allocated per PufferLib rollout slot. State is fixed-capacity and
+contains no pointers or device-side allocation. Eight CUDA lanes cooperate per
+environment: lane zero applies the action and advances state, then all lanes
+write the 192 bfloat16 observation features. Rewards and terminals are written
+directly to PufferLib buffers on the bound rollout stream.
+
+Terminal steps retain their final reward and terminal flag, append episode
+statistics to the PufferLib log, and reset the environment before writing the
+next observation. This matches PufferLib's CUDA environment lifecycle and
+keeps CUDA graph capture valid.
 
 ## Fidelity gates
 
-Grow the implementation by mechanics, with tick-level differential tests
-against deterministic zero-render observations from the authentic bridge:
+Grow mechanics behind differential checks against deterministic zero-render
+observations from the authentic bridge:
 
 1. Day lawn: sun economy, seed recharge, normal zombies, projectiles, mowers,
    flags, and terminal state.
 2. Night: graves, mushrooms, sleep/wake state, and no passive sky sun.
-3. Pool and fog: six rows, water lanes, lily pads, aquatic zombies, visibility.
+3. Pool and fog: six rows, water lanes, lily pads, aquatic zombies, and
+   visibility.
 4. Roof: flower pots, slope-aware projectiles, bungees, and catapults.
-5. Conveyor, bowling, Whack-a-Zombie, and boss-specific interaction modes.
-6. All 50 Adventure stages, with seeded event traces compared at every engine
-   tick before the native backend replaces authentic collection.
+5. Conveyor, bowling, Whack-a-Zombie, and boss-specific interactions.
+6. All 50 Adventure stages with seeded event traces compared at every engine
+   tick before the CUDA backend replaces authentic collection.
 
-For each gate, compare legal actions, entity spawn/despawn events, health,
-currency, wave state, reward inputs, and terminal results. Pixel equivalence is
-not a goal for the headless core; rendered evaluation remains the job of
-PvZ-Portable.
+For each gate, compare requested actions, executed effects, entity
+spawn/despawn events, health, currency, wave state, reward inputs, and terminal
+results. Pixel equivalence is not a goal for the headless core; rendered
+evaluation remains the job of PvZ-Portable.
 
 ## Performance rules
 
-- No allocation, Python call, JSON serialization, or rendering in `step`.
+- No allocation, Python call, JSON serialization, rendering, or host transfer
+  in `puf_step`.
 - Fixed-capacity state and deterministic per-environment RNG.
-- Contiguous buffers at the learner boundary.
-- CPU correctness and sanitizer tests before accelerator optimization.
-- Profile before moving branch-heavy mechanics to GPU. On an M5, a vectorized
-  C batch can beat Metal at small batch sizes because GPU dispatch is not free.
-- ABI-version observations and actions. Replays from different semantic
-  versions must never mix silently.
+- PufferLib-owned contiguous device buffers at the learner boundary.
+- One stable action ABI so replay data never loses its conditioning meaning.
+- CUDA graph-safe reset and step paths.
+- Profile complete rollout plus policy inference, not an isolated transition
+  kernel.
